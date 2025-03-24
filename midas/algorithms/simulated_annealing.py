@@ -12,7 +12,7 @@ from midas.utils.solution_types import evaluate_function
 from midas.utils.metrics import Simulated_Annealing_Metric_Toolbox
 from midas import logo, version
 import multiprocessing
-
+import numpy as np
 
 """
 This file contains a few of the classes and methods involved with 
@@ -198,7 +198,13 @@ def SA(x, k, active, Buffer, BufferCost, self, opt):
         challenge.name = f"child_{x}_{k}_{number}"
         challenge.parameters = copy.deepcopy(self.file_settings['optimization']['objectives'])
         challenge.add_additional_information(self.file_settings)
-        challenge.evaluate()
+        if 'ml_model' in self.file_settings['genome'] and 'number_of_generations' in self.file_settings['genome']['ml_model']:
+                if x < self.file_settings['genome']['ml_model']['number_of_generations']:
+                    challenge.evaluate(RUN_ML=True)
+                else:
+                    challenge.evaluate()
+        else:
+            challenge.evaluate()
         all_values = open('all_value_tracker.txt','a')
         all_values.write(f"{challenge.name},    ")
         for param in challenge.parameters:
@@ -247,7 +253,10 @@ def SA_prun(k, self):
     else:
         active.generate_initial(self.file_settings['genome']['chromosomes'])
 
-    active.evaluate()
+    if 'ml_model' in self.file_settings['genome'] and 'number_of_generations' in self.file_settings['genome']['ml_model']:
+        active.evaluate(RUN_ML=True)
+    else:
+        active.evaluate()
     all_values = open('all_value_tracker.txt','a')
     all_values.write(f"{active.name},    ")
     for param in active.parameters:
@@ -363,7 +372,10 @@ class SimulatedAnnealing(object):
         else:
             active.generate_initial(self.file_settings['genome']['chromosomes'])
         # print(active.genome)
-        active.evaluate()
+        if 'ml_model' in self.file_settings['genome'] and 'number_of_generations' in self.file_settings['genome']['ml_model']:
+            active.evaluate(RUN_ML=True)
+        else:
+            active.evaluate()
         # will store the fit for active solution
         one = []
         one.append(active)
@@ -414,7 +426,7 @@ class SimulatedAnnealing(object):
             DummyTSolutions = []
             for x in TSolutionsfitness:
                 minTSolutionfitnessindex = TSolutionsfitness.index(x)
-                if x not in DummyTSolutionsCost:
+                if x not in DummyTSolutionsCost and x not in BufferCost:
                     DummyTSolutionsCost.append(x)
                     DummyTSolutions.append(TSolutions[minTSolutionfitnessindex])
             # replaces TSolutions with a new list with same contents except no duplicates
@@ -707,7 +719,21 @@ class SimulatedAnnealing(object):
                 MoveAcceptanceRatio = TotalAcceptanceProbability / (self.num_procs * self.file_settings['optimization']['population_size'])
             print_dict['move_acceptance_ratio'] = MoveAcceptanceRatio
             # update Buffer
+
             Buffer, BufferCost = UpdateBuffer(Buffer, BufferCost, NewSolutions, NewSolutionsfitness)
+
+            if 'ml_model' in self.file_settings['genome']:
+                if x == self.file_settings['genome']['ml_model']['number_of_generations']-1:
+                    for i in range(len(Buffer)):
+                        Buffer[i].run_parcs()
+                    Buffer = self.fitness.calculate(Buffer)
+                    BufferCost = [Buffer[i].fitness for i in range(len(Buffer))]
+                    BestSolutionCost= np.inf
+                    for i in range(len(BufferCost)):
+                        if BestSolutionCost > BufferCost[i]:
+                            BestSolution = Buffer[i]
+                            BestSolutionCost = BufferCost[i]
+           
             # update active solution
             active, activeCost = UpdateActive(self.cooling_schedule.temperature, Buffer, BufferCost)
 

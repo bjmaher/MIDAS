@@ -1958,7 +1958,467 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
         print('exiting cycle evaluate...')
         return(RUN)
 
-    def run_ml_cycle(self,fuel_loc,c0_assb,cycle_lp,rdir,ncyc=1):
+    @staticmethod
+    def get_keff(ibu,dbu,bu0,ikeff):
+        '''
+        Compute keff 20 GWD/t lookahead in steps of 1 GWD/t based on an
+        initial bu0 and predefined bu and keff grid from lattice calculations.
+        '''
+        obu = bu0 + dbu
+        no = obu.shape[0]
+        okeff = np.zeros(no)
+        for i in range(no):
+            bu=obu[i]
+            if bu==0:
+                inf_bu = ibu[0]
+                inf_id = 0
+            else:
+                inf_bu = ibu[bu>ibu][-1]
+                inf_id = np.where(inf_bu==ibu)[0][0]
+            if inf_bu == ibu[-1]:
+                bu2=inf_bu
+                bu1=ibu[inf_id-1]
+                lbu = (ikeff[inf_id]-ikeff[inf_id-1])/(bu2-bu1)
+                keff = ikeff[inf_id] + lbu*(bu-bu2)
+            else:
+                bu1=inf_bu
+                bu2=ibu[inf_id+1]
+                lbu = (ikeff[inf_id+1]-ikeff[inf_id])/(bu2-bu1)
+                keff = ikeff[inf_id] + lbu*(bu-bu1)
+            okeff[i]=keff
+        return(okeff)
+    
+    @staticmethod
+    def fuel2qcore(lp_keff):
+        lp_c = lp_keff
+        vec_null = np.zeros(lp_c.shape[1])
+        lp = np.zeros((9,9,lp_c.shape[1]))
+        lp[0,0,:] = lp_c[0,:]
+        lp[0,1,:] = lp_c[1,:]
+        lp[0,2,:] = lp_c[9,:]
+        lp[0,3,:] = lp_c[17,:]
+        lp[0,4,:] = lp_c[25,:]
+        lp[0,5,:] = lp_c[32,:]
+        lp[0,6,:] = lp_c[39,:]
+        lp[0,7,:] = lp_c[45,:]
+        lp[0,8,:] = vec_null
+        #
+        lp[1,0,:] = lp_c[1,:]
+        lp[1,1,:] = lp_c[2,:]
+        lp[1,2,:] = lp_c[3,:]
+        lp[1,3,:] = lp_c[4,:]
+        lp[1,4,:] = lp_c[5,:]
+        lp[1,5,:] = lp_c[6,:]
+        lp[1,6,:] = lp_c[7,:]
+        lp[1,7,:] = lp_c[8,:]
+        lp[1,8,:] = vec_null
+        #
+        lp[2,0,:] = lp_c[9,:]
+        lp[2,1,:] = lp_c[10,:]
+        lp[2,2,:] = lp_c[11,:]
+        lp[2,3,:] = lp_c[12,:]
+        lp[2,4,:] = lp_c[13,:]
+        lp[2,5,:] = lp_c[14,:]
+        lp[2,6,:] = lp_c[15,:]
+        lp[2,7,:] = lp_c[16,:]
+        lp[2,8,:] = vec_null
+        #
+        lp[3,0,:] = lp_c[17,:]
+        lp[3,1,:] = lp_c[18,:]
+        lp[3,2,:] = lp_c[19,:]
+        lp[3,3,:] = lp_c[20,:]
+        lp[3,4,:] = lp_c[21,:]
+        lp[3,5,:] = lp_c[22,:]
+        lp[3,6,:] = lp_c[23,:]
+        lp[3,7,:] = lp_c[24,:]
+        lp[3,8,:] = vec_null
+        #
+        lp[4,0,:] = lp_c[25,:]
+        lp[4,1,:] = lp_c[26,:]
+        lp[4,2,:] = lp_c[27,:]
+        lp[4,3,:] = lp_c[28,:]
+        lp[4,4,:] = lp_c[29,:]
+        lp[4,5,:] = lp_c[30,:]
+        lp[4,6,:] = lp_c[31,:]
+        lp[4,7,:] = vec_null
+        lp[4,8,:] = vec_null
+        #
+        lp[5,0,:] = lp_c[32,:]
+        lp[5,1,:] = lp_c[33,:]
+        lp[5,2,:] = lp_c[34,:]
+        lp[5,3,:] = lp_c[35,:]
+        lp[5,4,:] = lp_c[36,:]
+        lp[5,5,:] = lp_c[37,:]
+        lp[5,6,:] = lp_c[38,:]
+        lp[5,7,:] = vec_null
+        lp[5,8,:] = vec_null
+        #
+        lp[6,0,:] = lp_c[39,:]
+        lp[6,1,:] = lp_c[40,:]
+        lp[6,2,:] = lp_c[41,:]
+        lp[6,3,:] = lp_c[42,:]
+        lp[6,4,:] = lp_c[43,:]
+        lp[6,5,:] = lp_c[44,:]
+        lp[6,6,:] = vec_null
+        lp[6,7,:] = vec_null
+        lp[6,8,:] = vec_null
+        #
+        lp[7,0,:] = lp_c[45,:]
+        lp[7,1,:] = lp_c[46,:]
+        lp[7,2,:] = lp_c[47,:]
+        lp[7,3,:] = lp_c[48,:]
+        lp[7,4,:] = vec_null
+        lp[7,5,:] = vec_null
+        lp[7,6,:] = vec_null
+        lp[7,7,:] = vec_null
+        lp[7,8,:] = vec_null
+        #
+        lp[8,0,:] = vec_null
+        lp[8,1,:] = vec_null
+        lp[8,2,:] = vec_null
+        lp[8,3,:] = vec_null
+        lp[8,4,:] = vec_null
+        lp[8,5,:] = vec_null
+        lp[8,6,:] = vec_null
+        lp[8,7,:] = vec_null
+        lp[8,8,:] = vec_null
+        #
+        return(lp)
+
+    @staticmethod
+    def fuel2fcore(lp_keff):
+        lp_c = lp_keff
+        vec_null = np.zeros(lp_c.shape[1])
+        lp = np.zeros((17,17,lp_c.shape[1]))
+        lp[0,0,:] = vec_null
+        lp[0,1,:] = vec_null
+        lp[0,2,:] = vec_null
+        lp[0,3,:] = vec_null
+        lp[0,4,:] = vec_null
+        lp[0,5,:] = vec_null
+        lp[0,6,:] = vec_null
+        lp[0,7,:] = vec_null
+        lp[0,8,:] = vec_null
+        lp[0,9,:] = vec_null
+        lp[0,10,:] = vec_null
+        lp[0,11,:] = vec_null
+        lp[0,12,:] = vec_null
+        lp[0,13,:] = vec_null
+        lp[0,14,:] = vec_null
+        lp[0,15,:] = vec_null
+        lp[0,16,:] = vec_null
+        #
+        lp[1,0,:] = vec_null
+        lp[1,1,:] = vec_null
+        lp[1,2,:] = vec_null
+        lp[1,3,:] = vec_null
+        lp[1,4,:] = vec_null
+        lp[1,5,:] = lp_c[48,:]
+        lp[1,6,:] = lp_c[47,:]
+        lp[1,7,:] = lp_c[46,:]
+        lp[1,8,:] = lp_c[45,:]
+        lp[1,9,:] = lp_c[8,:]
+        lp[1,10,:] = lp_c[16,:]
+        lp[1,11,:] = lp_c[24,:]
+        lp[1,12,:] = vec_null
+        lp[1,13,:] = vec_null
+        lp[1,14,:] = vec_null
+        lp[1,15,:] = vec_null
+        lp[1,16,:] = vec_null
+        #
+        lp[2,0,:] = vec_null
+        lp[2,1,:] = vec_null
+        lp[2,2,] = vec_null
+        lp[2,3,:] = lp_c[44,:]
+        lp[2,4,:] = lp_c[43,:]
+        lp[2,5,:] = lp_c[42,:]
+        lp[2,6,:] = lp_c[41,:]
+        lp[2,7,:] = lp_c[40,:]
+        lp[2,8,:] = lp_c[39,:]
+        lp[2,9,:] = lp_c[7,:]
+        lp[2,10,:] = lp_c[15,:]
+        lp[2,11,:] = lp_c[23,:]
+        lp[2,12,:] = lp_c[31,:]
+        lp[2,13,:] = lp_c[38,:]
+        lp[2,14,:] = vec_null
+        lp[2,15,:] = vec_null
+        lp[2,16,:] = vec_null
+        #
+        lp[3,0,:] = vec_null
+        lp[3,1,:] = vec_null
+        lp[3,2,:] = lp_c[38,:]
+        lp[3,3,:] = lp_c[37,:]
+        lp[3,4,:] = lp_c[36,:]
+        lp[3,5,:] = lp_c[35,:]
+        lp[3,6,:] = lp_c[34,:]
+        lp[3,7,:] = lp_c[33,:]
+        lp[3,8,:] = lp_c[32,:]
+        lp[3,9,:] = lp_c[6,:]
+        lp[3,10,:] = lp_c[14,:]
+        lp[3,11,:] = lp_c[22,:]
+        lp[3,12,:] = lp_c[30,:]
+        lp[3,13,:] = lp_c[37,:]
+        lp[3,14,:] = lp_c[44,:]
+        lp[3,15,:] = vec_null
+        lp[3,16,:] = vec_null
+        #
+        lp[4,0,:] = vec_null
+        lp[4,1,:] = vec_null
+        lp[4,2,:] = lp_c[31,:]
+        lp[4,3,:] = lp_c[30,:]
+        lp[4,4,:] = lp_c[29,:]
+        lp[4,5,:] = lp_c[28,:]
+        lp[4,6,:] = lp_c[27,:]
+        lp[4,7,:] = lp_c[26,:]
+        lp[4,8,:] = lp_c[25,:]
+        lp[4,9,:] = lp_c[5,:]
+        lp[4,10,:] = lp_c[13,:]
+        lp[4,11,:] = lp_c[21,:]
+        lp[4,12,:] = lp_c[29,:]
+        lp[4,13,:] = lp_c[36,:]
+        lp[4,14,:] = lp_c[43,:]
+        lp[4,15,:] = vec_null
+        lp[4,16,:] = vec_null
+        #
+        lp[5,0,:] = vec_null
+        lp[5,1,:] = lp_c[24,:]
+        lp[5,2,:] = lp_c[23,:]
+        lp[5,3,:] = lp_c[22,:]
+        lp[5,4,:] = lp_c[21,:]
+        lp[5,5,:] = lp_c[20,:]
+        lp[5,6,:] = lp_c[19,:]
+        lp[5,7,:] = lp_c[18,:]
+        lp[5,8,:] = lp_c[17,:]
+        lp[5,9,:] = lp_c[4,:]
+        lp[5,10,:] = lp_c[12,:]
+        lp[5,11,:] = lp_c[20,:]
+        lp[5,12,:] = lp_c[28,:]
+        lp[5,13,:] = lp_c[35,:]
+        lp[5,14,:] = lp_c[42,:]
+        lp[5,15,:] = lp_c[48,:]
+        lp[5,16,:] = vec_null
+        #
+        lp[6,0,:] = vec_null
+        lp[6,1,:] = lp_c[16,:]
+        lp[6,2,:] = lp_c[15,:]
+        lp[6,3,:] = lp_c[14,:]
+        lp[6,4,:] = lp_c[13,:]
+        lp[6,5,:] = lp_c[12,:]
+        lp[6,6,:] = lp_c[11,:]
+        lp[6,7,:] = lp_c[10,:]
+        lp[6,8,:] = lp_c[9,:]
+        lp[6,9,:] = lp_c[3,:]
+        lp[6,10,:] = lp_c[11,:]
+        lp[6,11,:] = lp_c[19,:]
+        lp[6,12,:] = lp_c[27,:]
+        lp[6,13,:] = lp_c[34,:]
+        lp[6,14,:] = lp_c[41,:]
+        lp[6,15,:] = lp_c[47,:]
+        lp[6,16,:] = vec_null
+        #
+        lp[7,0,:] = vec_null
+        lp[7,1,:] = lp_c[8,:]
+        lp[7,2,:] = lp_c[7,:]
+        lp[7,3,:] = lp_c[6,:]
+        lp[7,4,:] = lp_c[5,:]
+        lp[7,5,:] = lp_c[4,:]
+        lp[7,6,:] = lp_c[3,:]
+        lp[7,7,:] = lp_c[2,:]
+        lp[7,8,:] = lp_c[1,:]
+        lp[7,9,:] = lp_c[2,:]
+        lp[7,10,:] = lp_c[10,:]
+        lp[7,11,:] = lp_c[18,:]
+        lp[7,12,:] = lp_c[26,:]
+        lp[7,13,:] = lp_c[33,:]
+        lp[7,14,:] = lp_c[40,:]
+        lp[7,15,:] = lp_c[46,:]
+        lp[7,16,:] = vec_null
+        #
+        lp[8,0,:] = vec_null
+        lp[8,1,:] = lp_c[45,:]
+        lp[8,2,:] = lp_c[39,:]
+        lp[8,3,:] = lp_c[32,:]
+        lp[8,4,:] = lp_c[25,:]
+        lp[8,5,:] = lp_c[17,:]
+        lp[8,6,:] = lp_c[9,:]
+        lp[8,7,:] = lp_c[1,:]
+        lp[8,8,:] = lp_c[0,:]
+        lp[8,9,:] = lp_c[1,:]
+        lp[8,10,:] = lp_c[9,:]
+        lp[8,11,:] = lp_c[17,:]
+        lp[8,12,:] = lp_c[25,:]
+        lp[8,13,:] = lp_c[32,:]
+        lp[8,14,:] = lp_c[39,:]
+        lp[8,15,:] = lp_c[45,:]
+        lp[8,16,:] = vec_null
+        #
+        lp[9,0,:] = vec_null
+        lp[9,1,:] = lp_c[46,:]
+        lp[9,2,:] = lp_c[40,:]
+        lp[9,3,:] = lp_c[33,:]
+        lp[9,4,:] = lp_c[26,:]
+        lp[9,5,:] = lp_c[18,:]
+        lp[9,6,:] = lp_c[10,:]
+        lp[9,7,:] = lp_c[2,:]
+        lp[9,8,:] = lp_c[1,:]
+        lp[9,9,:] = lp_c[2,:]
+        lp[9,10,:] = lp_c[3,:]
+        lp[9,11,:] = lp_c[4,:]
+        lp[9,12,:] = lp_c[5,:]
+        lp[9,13,:] = lp_c[6,:]
+        lp[9,14,:] = lp_c[7,:]
+        lp[9,15,:] = lp_c[8,:]
+        lp[9,16,:] = vec_null
+        #
+        lp[10,0,:] = vec_null
+        lp[10,1,:] = lp_c[47,:]
+        lp[10,2,:] = lp_c[41,:]
+        lp[10,3,:] = lp_c[34,:]
+        lp[10,4,:] = lp_c[27,:]
+        lp[10,5,:] = lp_c[19,:]
+        lp[10,6,:] = lp_c[11,:]
+        lp[10,7,:] = lp_c[3,:]
+        lp[10,8,:] = lp_c[9,:]
+        lp[10,9,:] = lp_c[10,:]
+        lp[10,10,:] = lp_c[11,:]
+        lp[10,11,:] = lp_c[12,:]
+        lp[10,12,:] = lp_c[13,:]
+        lp[10,13,:] = lp_c[14,:]
+        lp[10,14,:] = lp_c[15,:]
+        lp[10,15,:] = lp_c[16,:]
+        lp[10,16,:] = vec_null
+        #
+        lp[11,0,:] = vec_null
+        lp[11,1,:] = lp_c[48,:]
+        lp[11,2,:] = lp_c[42,:]
+        lp[11,3,:] = lp_c[35,:]
+        lp[11,4,:] = lp_c[28,:]
+        lp[11,5,:] = lp_c[20,:]
+        lp[11,6,:] = lp_c[12,:]
+        lp[11,7,:] = lp_c[4,:]
+        lp[11,8,:] = lp_c[17,:]
+        lp[11,9,:] = lp_c[18,:]
+        lp[11,10,:] = lp_c[19,:]
+        lp[11,11,:] = lp_c[20,:]
+        lp[11,12,:] = lp_c[21,:]
+        lp[11,13,:] = lp_c[22,:]
+        lp[11,14,:] = lp_c[23,:]
+        lp[11,15,:] = lp_c[24,:]
+        lp[11,16,:] = vec_null
+        #
+        lp[12,0,:] = vec_null
+        lp[12,1,:] = vec_null
+        lp[12,2,:] = lp_c[43,:]
+        lp[12,3,:] = lp_c[36,:]
+        lp[12,4,:] = lp_c[29,:]
+        lp[12,5,:] = lp_c[21,:]
+        lp[12,6,:] = lp_c[13,:]
+        lp[12,7,:] = lp_c[5,:]
+        lp[12,8,:] = lp_c[25,:]
+        lp[12,9,:] = lp_c[26,:]
+        lp[12,10,:] = lp_c[27,:]
+        lp[12,11,:] = lp_c[28,:]
+        lp[12,12,:] = lp_c[29,:]
+        lp[12,13,:] = lp_c[30,:]
+        lp[12,14,:] = lp_c[31,:]
+        lp[12,15,:] = vec_null
+        lp[12,16,:] = vec_null
+        #
+        lp[13,0,:] = vec_null
+        lp[13,1,:] = vec_null
+        lp[13,2,:] = lp_c[44,:]
+        lp[13,3,:] = lp_c[37,:]
+        lp[13,4,:] = lp_c[30,:]
+        lp[13,5,:] = lp_c[22,:]
+        lp[13,6,:] = lp_c[14,:]
+        lp[13,7,:] = lp_c[6,:]
+        lp[13,8,:] = lp_c[32,:]
+        lp[13,9,:] = lp_c[33,:]
+        lp[13,10,:] = lp_c[34,:]
+        lp[13,11,:] = lp_c[35,:]
+        lp[13,12,:] = lp_c[36,:]
+        lp[13,13,:] = lp_c[37,:]
+        lp[13,14,:] = lp_c[38,:]
+        lp[13,15,:] = vec_null
+        lp[13,16,:] = vec_null
+        #
+        lp[14,0,:] = vec_null
+        lp[14,1,:] = vec_null
+        lp[14,2,] = vec_null
+        lp[14,3,:] = lp_c[38,:]
+        lp[14,4,:] = lp_c[31,:]
+        lp[14,5,:] = lp_c[23,:]
+        lp[14,6,:] = lp_c[15,:]
+        lp[14,7,:] = lp_c[7,:]
+        lp[14,8,:] = lp_c[39,:]
+        lp[14,9,:] = lp_c[40,:]
+        lp[14,10,:] = lp_c[41,:]
+        lp[14,11,:] = lp_c[42,:]
+        lp[14,12,:] = lp_c[43,:]
+        lp[14,13,:] = lp_c[44,:]
+        lp[14,14,:] = vec_null
+        lp[14,15,:] = vec_null
+        lp[14,16,:] = vec_null
+        #
+        lp[15,0,:] = vec_null
+        lp[15,1,:] = vec_null
+        lp[15,2,:] = vec_null
+        lp[15,3,:] = vec_null
+        lp[15,4,:] = vec_null
+        lp[15,5,:] = lp_c[24,:]
+        lp[15,6,:] = lp_c[16,:]
+        lp[15,7,:] = lp_c[8,:]
+        lp[15,8,:] = lp_c[45,:]
+        lp[15,9,:] = lp_c[46,:]
+        lp[15,10,:] = lp_c[47,:]
+        lp[15,11,:] = lp_c[48,:]
+        lp[15,12,:] = vec_null
+        lp[15,13,:] = vec_null
+        lp[15,14,:] = vec_null
+        lp[15,15,:] = vec_null
+        lp[15,16,:] = vec_null
+        #
+        lp[16,0,:] = vec_null
+        lp[16,1,:] = vec_null
+        lp[16,2,:] = vec_null
+        lp[16,3,:] = vec_null
+        lp[16,4,:] = vec_null
+        lp[16,5,:] = vec_null
+        lp[16,6,:] = vec_null
+        lp[16,7,:] = vec_null
+        lp[16,8,:] = vec_null
+        lp[16,9,:] = vec_null
+        lp[16,10,:] = vec_null
+        lp[16,11,:] = vec_null
+        lp[16,12,:] = vec_null
+        lp[16,13,:] = vec_null
+        lp[16,14,:] = vec_null
+        lp[16,15,:] = vec_null
+        lp[16,16,:] = vec_null
+        #
+        return(lp)
+
+    @staticmethod
+    def fuel2fuel(lp_keff, lp_pp):
+        lp = lp_keff
+        return(lp)
+
+
+    def get_keff_pca(self,pca,lp_asb,lp_bu,dbu,xs_keff):
+        '''
+        Method that returns the keff coefficients for a loading pattern
+        '''
+        nasb = lp_bu.shape[0]
+        lp_keff = np.zeros((nasb,pca.n_components))
+        for i in range(nasb):
+            iasb = lp_asb[i][4:]
+            ibu0 = lp_bu[i]
+            ikeff = self.get_keff(xs_keff[iasb]['bu'],dbu,ibu0,xs_keff[iasb]['keff'])
+            ikeff_pca=pca.transform(ikeff.reshape(1,-1))
+            lp_keff[i,:] = ikeff_pca[0,:]
+        return(lp_keff)
+
+    def run_ml_cycle(self,fuel_loc,cyc_assb,cycle_lp,rdir,ncyc=1):
         pwd = Path(os.getcwd())
         run_directory = pwd / rdir
         if not os.path.exists(run_directory):
@@ -1967,58 +2427,296 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
             shutil.rmtree(run_directory, ignore_errors=True)
             os.makedirs(run_directory)
         
+        # First write the PARCS input file
+        
+        self.update_core_lp(cycle_lp,cyc_assb,fuel_loc,ncyc)
+
+        cdir = self.library
+        exp_file = 'cyc_exp.dep' 
+        dist_file = run_directory / exp_file
+        self.write_exp(dist_file,ncyc)
+        
         os.chdir(run_directory)
         print('{} cycle {} calculation starts at {} with ML model!'.format(self.name,ncyc,os.getcwd()))
+
+        core_cycle_lattice = copy.deepcopy(self.core_lattice)
+        xs_array_cycle = np.zeros((core_cycle_lattice.shape[0],core_cycle_lattice.shape[1]), dtype='<U20')
+        pincal_loc = np.zeros((core_cycle_lattice.shape[0],core_cycle_lattice.shape[1]))
+        for x in range(core_cycle_lattice.shape[0]):
+            for y in range(core_cycle_lattice.shape[1]):
+                loc = core_cycle_lattice[x,y]
+                if loc != "00" and loc[0] != "R":
+                    sel_asb=self.full_core['C'+str(ncyc)][loc][0]
+                    if sel_asb in self.reload_inventory:
+                        asb_type = self.reload_inventory[sel_asb]['TYPE']
+                        fresh_ass = 'FE' + str(asb_type)
+                        xs_val = self.core_dict['Inventory'][fresh_ass]['Cross_Section']
+                    else:
+                        fresh_ass = sel_asb
+                        xs_val = self.core_dict['Inventory'][fresh_ass]['Cross_Section']
+                    xs_array_cycle[x,y] = xs_val
+                    if loc in self.core_dict['fuel']['C'+str(ncyc)] or loc in ['H09','H10','H11','H12','H13','H14','H15']:
+                        pincal_loc[x,y]=1
+                    else:
+                        pincal_loc[x,y]=0
+                elif loc[0] == "R":
+                    xs_array_cycle[x,y] = None
+                    pincal_loc[x,y]=0
+                elif loc == "00":
+                    xs_array_cycle[x,y] = None
+                    pincal_loc[x,y]=np.nan
         
+        xs_unique_cycle = np.unique(xs_array_cycle)
+        xs_unique_cycle = np.delete(xs_unique_cycle, np.argwhere(xs_unique_cycle == 'None'))
+        xs_forced_cycle = np.array([self.core_dict['Inventory']['FE461']['Cross_Section'],
+                        self.core_dict['Inventory']['FE462']['Cross_Section'],
+                        self.core_dict['Inventory']['FE501']['Cross_Section'],
+                        self.core_dict['Inventory']['FE502']['Cross_Section']])
+        xs_unique_cycle = np.append(xs_unique_cycle,xs_forced_cycle)
+        xs_unique_cycle = np.unique(xs_unique_cycle)
+
+        tag_unique_cycle = copy.deepcopy(xs_unique_cycle)
+        xs_ref = np.arange(5,5+len(xs_unique_cycle)) # 1-3 for reflectors and 4 for blankets
+        for key,value in self.core_dict["Inventory"].items():
+            for i in range(xs_unique_cycle.shape[0]):
+                if value['Cross_Section']==xs_unique_cycle[i]:
+                    tag_unique_cycle[i]=value['Tag']
+        fname = 'solution'
+        filename = fname + '.inp'
+        with open(filename,"w") as ofile:             
+            ofile.write("!******************************************************************************\n")
+            ofile.write('CASEID {}  \n'.format(fname))
+            ofile.write("!******************************************************************************\n\n")
+
+        with open(filename,"a") as ofile:             
+            ofile.write("CNTL\n")
+            ofile.write("     RUN_OPTS F T F F\n")
+            ofile.write("     INT_TH     T -1\n")
+            ofile.write("     CORE_POWER 100.0\n")
+            ofile.write("     CORE_TYPE  PWR\n")
+            ofile.write("     PPM        1000\n")
+            ofile.write("     DEPLETION  T  1.0E-5 T\n")
+            ofile.write("     TREE_XS    T  0 T  T  F  F  T  F  T  F  T  F  T  T  T  F \n")
+            ofile.write("     BANK_POS   100 100 100 100 100 100\n")
+            ofile.write("     XE_SM      1 1 1 1\n")
+            ofile.write("     SEARCH     PPM 1.0 1800.0 10.0\n")
+            ofile.write("     MULT_CYC   F\n")
+            ofile.write("     PIN_POWER  T\n")
+            ofile.write("     PLOT_OPTS 0 0 0 0 0 2\n")
+            ofile.write("\n")
+            ofile.write("!******************************************************************************\n\n")
+            
+        with open(filename,"a") as ofile:             
+            ofile.write("PARAM\n")
+            ofile.write("     LSOLVER  1 1 20\n")
+            ofile.write("     NODAL_KERN     HYBRID\n")
+            ofile.write("     CMFD     2\n")
+            ofile.write("     DECUSP   2\n")
+            ofile.write("     INIT_GUESS 0\n")
+            ofile.write("     CONV_SS   1.e-6 1.e-5 1.e-5\n")
+            ofile.write("     EPS_ANM   0.000001\n")
+            ofile.write("     NLUPD_SS  3 5 1\n")
+            ofile.write("\n")
+            ofile.write("!******************************************************************************\n\n")
+        
+
+        with open(filename,"a") as ofile:             
+            ofile.write("GEOM\n")
+            ofile.write("     GEO_DIM 17 17 30 1 1\n")
+            ofile.write("     RAD_CONF\n")
+            for iy in range(self.core_lattice.shape[0]):
+                ofile.write('     ')
+                for ix in range(self.core_lattice.shape[1]):
+                    iloc = self.core_lattice[iy,ix]
+                    if iloc == '00':
+                        value = '00 '
+                    elif iloc[0] == 'R':
+                        value = '10 '
+                    else:
+                        value = str(self.full_core['C'+str(ncyc)][iloc][1])
+                    ofile.write(value + '  ')
+                ofile.write('\n')
+            ofile.write('\n')
+            ofile.write("     GRID_X      17*21.50\n")
+            ofile.write("     NEUTMESH_X  17*1\n")
+            ofile.write("     GRID_Y      17*21.50\n")
+            ofile.write("     NEUTMESH_Y  17*1\n")
+            ofile.write("     GRID_Z      30.48 15.24 10.16 5.08 22*13.85455 5.08 10.16 15.24 30.48\n")            
+            ofile.write("     ASSY_TYPE   10   1*2   28*2    1*2 REFL\n")
+            for i in range(xs_unique_cycle.shape[0]):
+                if 'gd_0' in xs_unique_cycle[i]:
+                    ofile.write("     ASSY_TYPE   {}   1*1 1*4  26*{}  1*4  1*3 FUEL\n".format(tag_unique_cycle[i],xs_ref[i]))
+                else:
+                    ofile.write("     ASSY_TYPE   {}   1*1 1*4  1*4 24*{} 1*4 1*4  1*3 FUEL\n".format(tag_unique_cycle[i],xs_ref[i]))
+            ofile.write("\n")
+
+            ofile.write("     boun_cond   2 2 2 2 2 2\n")
+            ofile.write("     PINCAL_LOC\n")
+            for x in range(pincal_loc.shape[0]):
+                ofile.write("      ")
+                for y in range(pincal_loc.shape[1]):
+                    val = pincal_loc[x,y]
+                    if np.isnan(val):
+                        val = ' '
+                        ofile.write(val)
+                        ofile.write("  ")
+                    else:
+                        ofile.write(str(int(pincal_loc[x,y])))
+                        ofile.write("  ")
+                ofile.write("\n")
+            ofile.write("\n")
+            ofile.write("!******************************************************************************\n\n")
+        
+        with open(filename,"a") as ofile:             
+            ofile.write("FDBK\n")
+            ofile.write("     FA_POWPIT     {} 21.5\n".format(np.round(self.power/193,4)))
+            ofile.write("     GAMMA_FRAC    0.0208    0.0    0.0\n")
+            ofile.write("     CDC_DED   0 1\n")
+            ofile.write("     EFF_DOPLT   T  0.5556\n")
+            ofile.write("\n")
+            ofile.write("!******************************************************************************\n\n")
+
+
+        with open(filename,"a") as ofile:   
+            ofile.write("TH\n")          
+            ofile.write("     FLU_TYP       0\n")
+            ofile.write("     N_PINGT    264 25\n")
+            ofile.write("     PIN_DIM      4.1 4.75 0.58 6.13\n")
+            ofile.write("     FLOW_COND    {}  {}\n".format(np.round(self.inlet_temperature-273.15,2),np.round(self.flow/193,4)))
+            ofile.write("     HGAP     10000.0\n")
+            ofile.write("     N_RING   6\n")
+            ofile.write("     THMESH_X       17*1\n")
+            ofile.write("     THMESH_Y       17*1\n")
+            ofile.write("     THMESH_Z       1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30\n")
+            ofile.write("\n")
+            ofile.write("!******************************************************************************\n\n")
+
+        with open(filename,"a") as ofile:             
+            ofile.write("DEPL\n")
+            if ncyc==1:
+                ofile.write("     TIME_STP  1 1 17*30 13\n")
+            else:
+                ofile.write("     TIME_STP  1 1 22*30 14 14\n")
+            ofile.write("     INP_HST   './cyc_exp.dep' -2 1\n")
+            ofile.write("     PMAXS_F   1 '{}' 1\n".format(cdir + '/' + 'xs_gbot'))
+            ofile.write("     PMAXS_F   2 '{}' 2\n".format(cdir + '/' + 'xs_grad'))
+            ofile.write("     PMAXS_F   3 '{}' 3\n".format(cdir + '/' + 'xs_gtop'))
+            ofile.write("     PMAXS_F   4 '{}' 4\n".format(cdir + '/' + 'xs_g250_gd_0_wt_0'))
+            for i in range(xs_unique_cycle.shape[0]):
+                ofile.write("     PMAXS_F   {} '{}' {}\n".format(5+i,cdir + '/' + xs_unique_cycle[i],5+i))
+            ofile.write("\n")
+            ofile.write("!******************************************************************************\n\n")
+            ofile.write(".")
 
         # Load ML model
         ml_model_path = self.settings['genome']['ml_model']['model']
-        # Load the XGBoost model
         with open(ml_model_path, 'rb') as model_file:
             ml_model = pickle.load(model_file)
-        import pdb; pdb.set_trace()
 
+        input_pca_path = self.settings['genome']['ml_model']['input_pca']
+        with open(input_pca_path, 'rb') as ipca_file:
+            ipca = pickle.load(ipca_file)
+
+        output_scaler_path = self.settings['genome']['ml_model']['output_scaler']
+        with open(output_scaler_path, 'rb') as output_scaler_file:
+            oscaler = pickle.load(output_scaler_file)
+
+        imax_keff = np.loadtxt(self.settings['genome']['ml_model']['input_max'])
+        imin_keff = np.loadtxt(self.settings['genome']['ml_model']['input_min'])
+
+        xslib_path = self.settings['genome']['parcs_data']['xs_library'] + '/' + "xs_dts_mcyc.p"
+        AsbXsDict = pickle.load(open( xslib_path, "rb" ) )
+        asb_list= list(AsbXsDict.keys())
+        bu_list = list(AsbXsDict[asb_list[0]].keys())
+        bu_step = 20
+        dbu = np.arange(0,bu_step+1,1)  # lookahead step from initial burnup
         
-        
-        # Run PARCS INPUT DECK
-        
-        parcscmd = "/cm/shared/nuclearCodes/parcs-3.4.3/PARCS-v343_Exe/Executables/Linux/parcs-v343-linux2-intel-x64-release.x"
-
-        print('Execute PARCS')
-        print('Running in process')
-        #
-        output = subprocess.check_output([parcscmd, filename], stderr=STDOUT, timeout=120)
-        # Get Results
-       
-        ofile = fname + '.out'
-        self.get_cycle_results(fname,ncyc)
-
-        # Store Optionally 
-        if 'options' in self.settings:
-            if 'store' in self.settings['options']:
-                store_op = self.settings['options']['store']
-                self.store_cycle(store_op,fname,cycle_lp,ncyc)
-
-        ## update reload inventory
-        bu_2d, bu_3d=self.get_burnup(fname+'.parcs_dep')
-        reac = self.get_reac(c0_assb,bu_2d)
+        # Get assembly xs names for each fuel assembly in loading pattern 
+        fuel_genes  = list(self.settings['genome']['chromosomes'].keys())
+        cyc_xstype = []
+        bu0_lp = []
         for i in range(len(cycle_lp)):
-            iasb = cycle_lp[i]
-            if iasb in self.reload_inventory:
-                self.reload_inventory[iasb]['BU2D']=bu_2d[i]
-                self.reload_inventory[iasb]['BU3D']=bu_3d[i,:]
-                self.reload_inventory[iasb]['REAC']=reac[i]
-            else:
-                idict = {}
-                idict['BU2D']=bu_2d[i]
-                idict['BU3D']=bu_3d[i,:]
-                idict['REAC']=reac[i]
-                idict['TYPE']=c0_assb[i]
-                idict['QTY']= len(self.core_dict['fuel']['C'+str(ncyc)][fuel_loc[i]]['Symmetric_Assemblies']) + 1
-                idict['LOC'+str(ncyc)]=fuel_loc[i]
-                self.reload_inventory_counter +=1 
-                self.reload_inventory['ASB'+str(self.reload_inventory_counter)] = idict
+            itype = cyc_assb[i]
+            xs_tag = None
+            for fuel in fuel_genes:
+                if self.settings['genome']['chromosomes'][fuel]['type'] == itype:
+                    xs_tag = self.settings['genome']['chromosomes'][fuel]['serial']
+            cyc_xstype.append(xs_tag)
 
+            iasb = cycle_lp[i]
+            if 'FE' in iasb:
+                bu_val = 0.0
+            else:
+                bu_val = self.reload_inventory[iasb]['BU2D']
+            bu0_lp.append(bu_val)
+        
+        xs_keff = {}
+        for i in range(len(asb_list)):
+            keff_values = np.zeros(len(bu_list))
+            bu_values = np.zeros(len(bu_list))
+            for j in range(len(bu_list)):
+                asb = asb_list[i]
+                bu = bu_list[j]
+                keff_values[j]=float(AsbXsDict[asb_list[i]][bu]['keff'])
+                jbu = bu.split("BU=")[1]
+                bu_values[j]=float(jbu)
+            xs_keff[asb] = {'keff': keff_values, 'bu': bu_values}
+        
+        # Run the ML model
+
+        bu0_lp=np.array(bu0_lp)
+        keff_lp = self.get_keff_pca(ipca,cyc_xstype,bu0_lp,dbu,xs_keff)
+        if self.settings['genome']['ml_model']['type'] == 'CNN':
+            X = self.fuel2fcore(keff_lp)
+        elif self.settings['genome']['ml_model']['type'] == 'XGB':
+            X = self.fuel2fuel(keff_lp)
+        else:
+            raise ValueError("Invalid model type")
+
+        X_test_path = '/home/gkdelipe/midas/cnp_framatome/data/c1/X_10000.p'
+        with open(X_test_path, 'rb') as X_test_file:
+            X_test_dict = pickle.load(X_test_file)
+        
+        bu0_lp_test=X_test_dict['IBU2D']
+        cyc_xstype_test = X_test_dict['LP_XS']
+        keff_lp_test = self.get_keff_pca(ipca,cyc_xstype_test,bu0_lp_test,dbu,xs_keff)
+        X_test = self.fuel2fcore(keff_lp_test)
+        
+        
+        Xs = np.zeros((1,X.shape[0],X.shape[1],X.shape[2]))
+        Xs_test = np.zeros((1,X.shape[0],X.shape[1],X.shape[2]))
+        for i in range(X.shape[0]):
+            for j in range(X.shape[1]):
+                Xs[0,i,j,:]=(X[i,j,:]-imin_keff)/(imax_keff-imin_keff)
+                Xs_test[0,i,j,:]=(X_test[i,j,:]-imin_keff)/(imax_keff-imin_keff)
+        
+        Ys=ml_model.predict(Xs)
+        Y = oscaler.inverse_transform(Ys)
+
+        Ys_test=ml_model.predict(Xs_test)
+        Y_test = oscaler.inverse_transform(Ys_test)
+
+        
+
+        # Store results
+        
+        if ncyc==1:
+            self.cycle_parameters = {}
+        self.cycle_parameters['C'+str(ncyc)] = {}
+        self.cycle_parameters['C'+str(ncyc)]["cycle_length"]= Y[0,3]       
+        self.cycle_parameters['C'+str(ncyc)]["PinPowerPeaking"] = Y[0,2]
+        self.cycle_parameters['C'+str(ncyc)]["FDeltaH"] = Y[0,1]
+        self.cycle_parameters['C'+str(ncyc)]["FXY"] = Y[0,1]
+        self.cycle_parameters['C'+str(ncyc)]["FXYZ"] = Y[0,2]
+        self.cycle_parameters['C'+str(ncyc)]["max_boron"]= Y[0,0]
+
+        filename = 'ml.out'
+        with open(filename,"w") as ofile:             
+            ofile.write('Cycle Length: {:3f}'.format(self.cycle_parameters['C'+str(ncyc)]["cycle_length"]))
+            ofile.write('\nPin Power Peaking: {:3f}'.format(self.cycle_parameters['C'+str(ncyc)]["PinPowerPeaking"]))
+            ofile.write('\nFDeltaH: {:3f}'.format(self.cycle_parameters['C'+str(ncyc)]["FDeltaH"]))
+            ofile.write('\nBoron: {:3f}'.format(self.cycle_parameters['C'+str(ncyc)]["max_boron"]))
+    
         print('{} cycle {} calculation is done at {}!'.format(self.name,ncyc,os.getcwd()))
         os.chdir(pwd)
         gc.collect()  
@@ -2026,6 +2724,57 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
         print('exiting cycle evaluate...')
         return()
 
+    def run_parcs(self):
+        # Run PARCS INPUT DECK
+        pwd = Path(os.getcwd())
+        run_directory = pwd / self.name
+        ncyc = int(self.settings['genome']['design_limits']['ncycle'])
+        cycle_dir = 'c{:d}'.format(ncyc)
+        run_directory = run_directory / cycle_dir
+        os.chdir(run_directory)
+        parcscmd = "/cm/shared/nuclearCodes/parcs-3.4.3/PARCS-v343_Exe/Executables/Linux/parcs-v343-linux2-intel-x64-release.x"
+        print('Execute PARCS')
+        print('Running in process')
+        fname = 'solution'
+        filename = fname + '.inp'
+        try:
+            #
+            output = subprocess.check_output([parcscmd, filename], stderr=STDOUT, timeout=240)
+            # Get Results
+            if 'Finished' in str(output):
+                ofile = fname + '.out'
+                self.get_cycle_results(fname,ncyc)
+                
+                # Clean
+
+                os.system('rm -f {}.parcs_pin*'.format(fname))
+                # os.system('rm -f {}.inp'.format(fname))
+                os.system('rm -f {}.inp_parcs_err'.format(fname))
+                os.system('rm -f {}.inp_paths_err'.format(fname))
+                os.system('rm -f {}.parcs_dep'.format(fname))
+                os.system('rm -f {}.parcs_itr'.format(fname))
+                os.system('rm -f {}.parcs_msg'.format(fname))
+                os.system('rm -f {}.parcs_out'.format(fname))
+                os.system('rm -f {}.parcs_sum'.format(fname))
+                os.system('rm -f {}.parcs_xml'.format(fname))
+                os.system('rm -f {}.parcs_rst'.format(fname))
+                #os.system('rm -f cyc_exp.dep')
+            else:
+                self.set_poor_results(ncyc=ncyc)
+                os.system('rm -f ./*')
+
+        except subprocess.TimeoutExpired:
+            print('Timed out - killing')
+            os.system('rm -f {}.parcs_pin*'.format(fname))
+            self.set_poor_results(ncyc=ncyc)
+            os.system('rm -f ./*')
+        self.parameters['max_boron']['value']=self.cycle_parameters['C'+str(ncyc)]['max_boron']
+        self.parameters['PinPowerPeaking']['value']=self.cycle_parameters['C'+str(ncyc)]['PinPowerPeaking']
+        self.parameters['FDeltaH']['value']=self.cycle_parameters['C'+str(ncyc)]['FDeltaH']
+        self.parameters['cycle_length']['value'] =  self.cycle_parameters['C'+str(ncyc)]['cycle_length']    
+        self.get_lcoe_cycle(ncyc)
+        os.chdir(pwd)
+    
     def get_quarter_symmetry_values(self,values,axis=None):
         exclude_indices = [1,2,3,4,5,6,7]
         values = np.array(values)
@@ -2047,7 +2796,7 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
         self.core_lattice = self.get_full_lattice()
         return()
 
-    def evaluate(self):
+    def evaluate(self,RUN_ML=False):
         """
         Redirects to the appropriate evaluate function
 
@@ -2055,12 +2804,12 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
         """
 
         if self.ncycles==1:
-            self.evaluate_cycle()
+            self.evaluate_cycle(RUN_ML)
         else:
             self.evaluate_mcycle()
         return()
        
-    def evaluate_cycle(self):
+    def evaluate_cycle(self,RUN_ML=False):
         """
         Creates the input deck, runs the calculation and retrieves the results and the cost.
 
@@ -2084,11 +2833,6 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
         else:
             shutil.rmtree(self.name, ignore_errors=True)
             os.makedirs(self.name)
-        
-        if 'ml_model' in self.settings['genome']:
-            RUN_ML=True
-        else:
-            RUN_ML=False
 
         cdir = self.library
         ncycle = int(self.settings['genome']['design_limits']['ncycle'])
@@ -2130,6 +2874,12 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
                 self.set_poor_results(ncyc=ncycle)
                 self.set_poor_results()
                 os.system('rm -f mcyc_exp.dep')
+                if 'initial' in self.name:
+                    print('Re-run initial case due to non-convergence')
+                    self.generate_initial(self.settings['genome']['chromosomes'])
+                    os.chdir(pwd)
+                    self.evaluate(RUN_ML)
+                    return()
                 os.chdir(pwd)
                 print('{} calculation is skipped'.format(self.name))
                 print('End of Single-Cycle Run ... Duration: {} s'.format(time.time()-start))
@@ -2230,6 +2980,12 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
                 self.set_poor_results(ncyc=ncycle)
                 self.set_poor_results()
                 os.system('rm -f mcyc_exp.dep')
+                if 'initial' in self.name:
+                    print('Re-run initial case due to non-convergence')
+                    self.generate_initial(self.settings['genome']['chromosomes'])
+                    os.chdir(pwd)
+                    self.evaluate(RUN_ML)
+                    return()
                 os.chdir(pwd)
                 print('{} calculation is skipped'.format(self.name))
                 print('End of Single-Cycle Run ... Duration: {} s'.format(time.time()-start))

@@ -567,6 +567,13 @@ if __name__ == "__main__":
         raise ValueError("Input File needs to be a valid .yaml file")
 
     factory = Optimization_Factory(args.cpus,args.input)
+    if 'ml_model' in factory.file_settings['genome']:
+        if factory.file_settings['genome']['ml_model']['type'] == 'CNN':
+            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # removes tf informative messages
+            os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+            import tensorflow as tf 
+            import keras
+
     optimization = factory.assemble_optimization()
     print("Completed Factory Assembly")
 
