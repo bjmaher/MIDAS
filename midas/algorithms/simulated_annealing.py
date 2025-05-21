@@ -116,6 +116,30 @@ class Exponential_Decreasing_Cooling_Schedule(object):
         else:
             self.temperature *= self.alpha
 
+def checkML(x, ml_generation):
+    '''
+    Function to check if the current generation is in the ML generation list
+    '''
+    if x < ml_generation[0]:
+        ML_FLAG = True
+    elif x >= ml_generation[-1]:
+        ML_FLAG = False
+    else:
+        ML_FLAG = True
+        ngen = np.arange(ml_generation[-1]+1)
+        for igen in ngen:
+            if igen in ml_generation:
+                ML_FLAG = not ML_FLAG
+            if x == igen:
+                break
+    return(ML_FLAG)
+
+def MLBuffer_Update(k,Buffer):
+    '''
+    Function to update the buffer.
+    '''
+    Buffer[k].run_parcs()
+    return(Buffer[k])
 
 def SA(x, k, active, Buffer, BufferCost, self, opt):
     """
@@ -199,7 +223,9 @@ def SA(x, k, active, Buffer, BufferCost, self, opt):
         challenge.parameters = copy.deepcopy(self.file_settings['optimization']['objectives'])
         challenge.add_additional_information(self.file_settings)
         if 'ml_model' in self.file_settings['genome'] and 'number_of_generations' in self.file_settings['genome']['ml_model']:
-                if x < self.file_settings['genome']['ml_model']['number_of_generations']:
+                ml_generation = self.file_settings['genome']['ml_model']['number_of_generations']
+                ML_FLAG=checkML(x, ml_generation)
+                if ML_FLAG:
                     challenge.evaluate(RUN_ML=True)
                 else:
                     challenge.evaluate()
@@ -723,9 +749,12 @@ class SimulatedAnnealing(object):
             Buffer, BufferCost = UpdateBuffer(Buffer, BufferCost, NewSolutions, NewSolutionsfitness)
 
             if 'ml_model' in self.file_settings['genome']:
-                if x == self.file_settings['genome']['ml_model']['number_of_generations']-1:
-                    for i in range(len(Buffer)):
-                        Buffer[i].run_parcs()
+                ml_generation = self.file_settings['genome']['ml_model']['number_of_generations']
+                ML_FLAG=checkML(x, ml_generation)
+                if ML_FLAG and x in np.array(ml_generation)-1:
+                    with ctx.Pool(processes=self.num_procs, ) as p:
+                        Buffer = p.starmap(MLBuffer_Update, [(k, Buffer) for k in range(len(Buffer))])
+                
                     Buffer = self.fitness.calculate(Buffer)
                     BufferCost = [Buffer[i].fitness for i in range(len(Buffer))]
                     BestSolutionCost= np.inf

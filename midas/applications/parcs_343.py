@@ -2673,30 +2673,29 @@ class MCycle_Inventory_Loading_Pattern_Solution(Solution):
         else:
             raise ValueError("Invalid model type")
 
-        X_test_path = '/home/gkdelipe/midas/cnp_framatome/data/c1/X_10000.p'
-        with open(X_test_path, 'rb') as X_test_file:
-            X_test_dict = pickle.load(X_test_file)
+        # X_test_path = '/home/gkdelipe/midas/cnp_framatome/ml_models/cnn/models/c1_model_1_cnn_ref2/X_13780'
+        # with open(X_test_path, 'rb') as X_test_file:
+        #     X_test_dict = pickle.load(X_test_file)
         
-        bu0_lp_test=X_test_dict['IBU2D']
-        cyc_xstype_test = X_test_dict['LP_XS']
-        keff_lp_test = self.get_keff_pca(ipca,cyc_xstype_test,bu0_lp_test,dbu,xs_keff)
-        X_test = self.fuel2fcore(keff_lp_test)
+        # bu0_lp_test=X_test_dict['IBU2D']
+        # cyc_xstype_test = X_test_dict['LP_XS']
+        # keff_lp_test = self.get_keff_pca(ipca,cyc_xstype_test,bu0_lp_test,dbu,xs_keff)
+        # X_test = self.fuel2fcore(keff_lp_test)
         
         
         Xs = np.zeros((1,X.shape[0],X.shape[1],X.shape[2]))
-        Xs_test = np.zeros((1,X.shape[0],X.shape[1],X.shape[2]))
+        #Xs_test = np.zeros((1,X.shape[0],X.shape[1],X.shape[2]))
         for i in range(X.shape[0]):
             for j in range(X.shape[1]):
                 Xs[0,i,j,:]=(X[i,j,:]-imin_keff)/(imax_keff-imin_keff)
-                Xs_test[0,i,j,:]=(X_test[i,j,:]-imin_keff)/(imax_keff-imin_keff)
+                #Xs_test[0,i,j,:]=(X_test[i,j,:]-imin_keff)/(imax_keff-imin_keff)
         
         Ys=ml_model.predict(Xs)
         Y = oscaler.inverse_transform(Ys)
 
-        Ys_test=ml_model.predict(Xs_test)
-        Y_test = oscaler.inverse_transform(Ys_test)
+        # Ys_test=ml_model.predict(Xs_test)
+        # Y_test = oscaler.inverse_transform(Ys_test)
 
-        
 
         # Store results
         
