@@ -1121,21 +1121,29 @@ class InputParser():
             info = self.file_settings['general']
         except KeyError:
             info = None
+
+        #   Internal attribute      YAML phrase              Default
+        general_opts = {
+            'debug_mode'        : ('debug_mode',             False),
+            'results_dir_name'  : ('results_directory_name', 'output_files'),
+            'set_seed'          : ('set_seed',               None),
+            'clear_results'     : ('clear_results',          'all_but_best'),
+            'methodology'       : ('optimizer',              'genetic_algorithm'),
+            'code_interface'    : ('code_type',              'PARCS343'),
+            'input_template'    : ('input_template',         {'apply':False,'loc':''}),
+            'calculation_type'  : ('calc_type',              'single_cycle'),
+            'statistics_plots'  : ('statistics_plots',       True),
+            'convergence_plots' : ('convergence_plots',      True),
+            'initial_population': ('initial_population',     None)
+        }
         
-        self.debug_mode = yaml_line_reader(info, 'debug_mode', False)
-        self.results_dir_name = yaml_line_reader(info, 'results_directory_name', 'output_files')
-        self.set_seed = yaml_line_reader(info, 'set_seed', None)
-        self.clear_results = yaml_line_reader(info, 'clear_results', 'all_but_best')
-        self.methodology = yaml_line_reader(info, 'optimizer', 'genetic_algorithm')
-        self.code_interface = yaml_line_reader(info, 'code_type', 'PARCS343')
-        template_default = {'apply':False,'loc':''}
-        self.input_template = yaml_line_reader(info, 'input_template', template_default)
-        self.calculation_type = yaml_line_reader(info, 'calc_type', 'single_cycle')
-        self.statistics_plots = yaml_line_reader(info, 'statistics_plots', True)
-        self.convergence_plots = yaml_line_reader(info, 'convergence_plots', True)
-        self.initial_population = yaml_line_reader(info, 'initial_population', None)
+        for attr_name, value in general_opts.items():
+            yaml_phrase, default = value
+            setattr(self, attr_name, yaml_line_reader(info, yaml_phrase, default))
+
         if self.input_template['apply'] and self.code_interface == 'parcs343':
             parcs343_template_check(self)
+
     ## Optimization Block ##
         try:
             info = self.file_settings['optimization']

@@ -13,7 +13,7 @@ import random
 import pickle
 import numpy as np
 import midas_data
-from midas.input_parser import  InputParser
+from midas.input_parser import InputParser
 from midas.optimizer import Optimizer
 from midas.utils.problem_preparation import Prepare_Problem_Values as prep_inp
 from midas.utils.decorators import error_handler, timer, profiler

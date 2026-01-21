@@ -442,7 +442,7 @@ class Optimizer():
         return
 
 
-class AgentOptimizers():
+class AgentOptimizer():
     '''
     Temporarily named AgentOptimizer, may change this.
 
@@ -456,7 +456,12 @@ class AgentOptimizers():
 
     Written by Bradley Maher. 01/17/2026
     '''
-    def __init__(self):
+    def __init__(self, opts):
+        self.opts = opts
+        pass
+
+    @staticmethod
+    def validate_otps():
         pass
 
     def main(self):

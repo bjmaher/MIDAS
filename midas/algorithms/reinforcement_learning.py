@@ -101,6 +101,16 @@ class RLEnv(gym.Env):
 class SB3Agent():
     '''
     Handles the learning of a model using training algorithms from SB3
+
+    Written by Bradley Maher. 01/16/2026
     '''
-    def __init__(self):
+    def __init__(self, opts):
+        self.env = self._build_env(opts)
+        pass
+
+    @staticmethod
+    def validate_otps():
+        pass
+
+    def _build_env(self, opts):
         pass
