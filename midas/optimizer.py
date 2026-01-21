@@ -25,6 +25,7 @@ from midas.codes import polaris624
 import midas_data
 from tests.regression.listsum import listsum
 
+
 ## Classes ##
 class Optimizer():
     """
@@ -439,4 +440,24 @@ class Optimizer():
             optimization_information.plot_optimization_convergence()
     
         return
-    
+
+
+class AgentOptimizers():
+    '''
+    Temporarily named AgentOptimizer, may change this.
+
+    Handles the implementation and learning of an agent.
+    Analog to the Optimizer class but for agent-focused algorithm rather than gene-based algorithms.
+    Theoretically, this should have very similar functionality.
+
+    # Notes:
+    I also wanted a cleaner starting environment to use while developing the RL system.
+    Should be easy to reintigrate to Optimizer if that is deemed necessary.
+
+    Written by Bradley Maher. 01/17/2026
+    '''
+    def __init__(self):
+        pass
+
+    def main(self):
+        pass

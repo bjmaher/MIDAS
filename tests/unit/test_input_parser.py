@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch, mock_open
 import tempfile
 
-from midas.input_parser import Input_Parser, yaml_line_reader, validate_input
+from midas.input_parser import InputParser, yaml_line_reader, validate_input
 
 
 class TestYamlLineReader:
@@ -82,7 +82,7 @@ class TestInputParser:
     
     def test_input_parser_initialization(self, sample_yaml_file):
         """Test Input_Parser initialization with valid YAML file."""
-        parser = Input_Parser(cpus=2, input_file=str(sample_yaml_file))
+        parser = InputParser(cpus=2, input_file=str(sample_yaml_file))
         assert parser is not None
         assert parser.cpus == 2
     
@@ -90,7 +90,7 @@ class TestInputParser:
         """Test Input_Parser with non-existent file."""
         invalid_file = temp_dir / "nonexistent.yaml"
         with pytest.raises(FileNotFoundError):
-            Input_Parser(cpus=1, input_file=str(invalid_file))
+            InputParser(cpus=1, input_file=str(invalid_file))
     
     def test_input_parser_with_invalid_yaml(self, temp_dir):
         """Test Input_Parser with invalid YAML content."""
@@ -99,18 +99,18 @@ class TestInputParser:
             f.write("invalid: yaml: content: [")
         
         with pytest.raises(yaml.YAMLError):
-            Input_Parser(cpus=1, input_file=str(invalid_yaml))
+            InputParser(cpus=1, input_file=str(invalid_yaml))
     
     @patch('midas.input_parser.validate_input')
     def test_input_parser_calls_validation(self, mock_validate, sample_yaml_file):
         """Test that Input_Parser calls validate_input for parsed values."""
         mock_validate.return_value = 'validated_value'
-        parser = Input_Parser(cpus=1, input_file=str(sample_yaml_file))
+        parser = InputParser(cpus=1, input_file=str(sample_yaml_file))
         assert mock_validate.called
     
     def test_input_parser_sets_default_values(self, sample_yaml_file):
         """Test that Input_Parser sets appropriate default values."""
-        parser = Input_Parser(cpus=1, input_file=str(sample_yaml_file))
+        parser = InputParser(cpus=1, input_file=str(sample_yaml_file))
         # Test that some default values are set
         assert hasattr(parser, 'cpus')
         assert parser.cpus == 1
@@ -125,7 +125,7 @@ class TestInputParserIntegration:
         with open(yaml_file, 'w') as f:
             yaml.dump(sample_yaml_config, f)
         
-        parser = Input_Parser(cpus=2, input_file=str(yaml_file))
+        parser = InputParser(cpus=2, input_file=str(yaml_file))
         
         # Verify key configuration values are parsed
         assert parser.methodology == 'genetic_algorithm'
@@ -146,7 +146,7 @@ class TestInputParserIntegration:
         with open(yaml_file, 'w') as f:
             yaml.dump(minimal_config, f)
         
-        parser = Input_Parser(cpus=1, input_file=str(yaml_file))
+        parser = InputParser(cpus=1, input_file=str(yaml_file))
         assert parser.methodology == 'genetic_algorithm'
         assert parser.population_size == 2
         assert parser.number_of_generations == 1
@@ -171,5 +171,5 @@ def test_methodology_validation(methodology, expected, temp_dir):
     with open(yaml_file, 'w') as f:
         yaml.dump(config, f)
     
-    parser = Input_Parser(cpus=1, input_file=str(yaml_file))
+    parser = InputParser(cpus=1, input_file=str(yaml_file))
     assert parser.methodology == expected

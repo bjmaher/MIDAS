@@ -13,7 +13,7 @@ import random
 import pickle
 import numpy as np
 import midas_data
-from midas.input_parser import  Input_Parser
+from midas.input_parser import  InputParser
 from midas.optimizer import Optimizer
 from midas.utils.problem_preparation import Prepare_Problem_Values as prep_inp
 from midas.utils.decorators import error_handler, timer, profiler
@@ -120,7 +120,7 @@ def main(args):
     logger.info("====================================================================================================\n")
 
 ## Parse input file
-    inp_lines = Input_Parser(args.cpus, args.input)
+    inp_lines = InputParser(args.cpus, args.input)
 ## Prepare input values for writing
     inp_lines = prep_inp.prepare_calc(inp_lines)
     logger.info("Parsed input file: %s", str(args.input))

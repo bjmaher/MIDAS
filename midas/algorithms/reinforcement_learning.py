@@ -38,6 +38,8 @@ class RLEnv(gym.Env):
         _get_obs:
         _parse_action_space:
         _parse_obs_space:
+    
+    Written by Bradley Maher. 01/16/2026
     '''
     def __init__(self):
         super().__init__()

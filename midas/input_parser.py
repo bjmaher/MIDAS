@@ -1092,8 +1092,7 @@ def parcs343_template_check(self):
             raise ValueError(f'{self.code_interface} input template is missing {key} flag') 
 
 
-
-class Input_Parser():
+class InputParser():
     """
     Centralized class for parsing user-supplied input arguments from the 
     MIDAS '.yaml' input file
