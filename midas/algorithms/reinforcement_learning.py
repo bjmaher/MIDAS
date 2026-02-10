@@ -172,8 +172,7 @@ class RLEnv(gym.Env):
 
         with self.population.current[0] as soln: # I really hope this WITH statement works as I imagined it would
             # Set the solution object's chromosome to this state
-            gene_map = ['FA1', 'FA2', 'FA3', 'FA4', 'FA5', 'FA6']
-            soln.chromosome = [gene_map[gene] for gene in self._current]
+            soln.chromosome = self._current
             inactive = False
 
             # See if the chromosome has already been tested. If not, run our chosen code to get it
