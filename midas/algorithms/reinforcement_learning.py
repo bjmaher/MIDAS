@@ -2,6 +2,7 @@
 import numpy as np
 import gymnasium as gym
 import stable_baselines3 as sb3
+from stable_baselines3.common.monitor import Monitor
 import logging
 from typing import Any, TypeVar, SupportsFloat
 
@@ -137,8 +138,9 @@ class RLEnv(gym.Env):
 
         return observation, reward, terminated, False, info
 
-    def render(self) -> Any | list[Any] | None:
-        pass
+    def render(self, mode='console') -> Any | list[Any] | None:
+        if mode != 'console':
+            mode = 'console'
 
     def close(self) -> None:
         pass
@@ -248,7 +250,13 @@ class SB3Agent():
             raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
 
     def _build_env(self):
-        return ShiftMultiWrapper(RLEnv(self.opts, self.initial, self.population, self.eval_func))
+        env = RLEnv(self.opts, self.initial, self.population, self.eval_func)
+
+        # Wrappers
+        env = ShiftMultiWrapper(env)
+        env = Monitor(env)
+
+        return env
 
     def train(self):
         self.model.learn(total_timesteps=self.opts.learning_generations)
