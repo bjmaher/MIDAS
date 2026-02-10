@@ -59,7 +59,7 @@ def validate_input(keyword, value):
     
     elif keyword == 'optimizer':
         value = str(value).lower().replace(' ','_')
-        if value not in ["genetic_algorithm","bayesian_optimization","simulated_annealing"]:
+        if value not in ["genetic_algorithm","bayesian_optimization","simulated_annealing","reinforcement_learning"]:
             raise ValueError("Requested methodology '" + value + "' invalid.")
     
     elif keyword == 'code_type':
@@ -437,6 +437,12 @@ def validate_input(keyword, value):
         elif isinstance(value, int) and value < 1:
             raise ValueError("buffer size must be greater than 1")
 
+    elif keyword == 'learning_generations':
+        value = int(value)
+        if not isinstance(value, int):
+            raise ValueError("learning generations must be an integer")
+        elif isinstance(value, int) and value < 1:
+            raise ValueError("learning generations must be greater than 1")
 
 ## Fuel Assembly Block ##
     elif keyword == 'assembly_options':
@@ -1137,6 +1143,7 @@ class InputParser():
             'initial_population': ('initial_population',     None)
         }
         
+        # Parse and set defaults for the general block
         for attr_name, value in general_opts.items():
             yaml_phrase, default = value
             setattr(self, attr_name, yaml_line_reader(info, yaml_phrase, default))
@@ -1197,6 +1204,7 @@ class InputParser():
         self.perturbation_type = yaml_line_reader(info, 'perturbation_type', perturbation_default)
         self.buffer_size = yaml_line_reader(info, 'buffer_size', 10)
 
+        self.learning_generations = yaml_line_reader(info, 'learning_generations', 1000)
         
     ## Fuel Assembly Block ##   
         self.fa_options = yaml_line_reader(self.file_settings, 'assembly_options', None)

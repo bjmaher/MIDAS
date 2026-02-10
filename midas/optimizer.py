@@ -18,6 +18,7 @@ from midas.algorithms import genetic_algorithm as GA
 from midas.algorithms import bayesian_optimization as BO
 from midas.algorithms import simulated_annealing as SA
 from midas.algorithms import parallel_simulated_annealing as PSA
+from midas.algorithms import reinforcement_learning as RL
 from midas.codes import parcs342, parcs343
 from midas.codes import ipwr_lut
 from midas.codes import trace50p5
@@ -54,6 +55,7 @@ class Optimizer():
         self.population = optools.Population(self.input.population_size, num_gene_combos)
         self.generation = optools.Generation(self.input.num_generations, num_gene_combos)
         self.fitness    = optools.Fitness()
+
         if self.input.code_interface == "parcs342":
             self.eval_func = parcs342.evaluate #assign, don't execute.
         elif self.input.code_interface == "parcs343":
@@ -78,6 +80,8 @@ class Optimizer():
             self.algorithm = SA.Simulated_Annealing(self.input)
         elif methodology == 'simulated_annealing' and self.input.num_procs > 1:
             self.algorithm = PSA.Parallel_Simulated_Annealing(self.input, self.eval_func)
+        elif methodology == 'reinforcement_learning':
+            self.algorithm = RL.Reinforcement_Learning(self.input, self.eval_func)
         #!TODO: Add the other algorithms back in.
         return
     
@@ -208,6 +212,11 @@ class Optimizer():
 
             if self.input.methodology == 'simulated_annealing'and self.input.num_procs == 1:
                 logger.info(f"Initial Temperature: {self.input.initial_temperature}")
+            elif self.input.methodology == 'reinforcement_learning':
+                # Pass the population to the RL handler. It will be needed to archive and look up solutions.
+                self.algorithm.set_population(self.population)
+                # # also pass the multithreading pool
+                # self.algorithm.set_pool(pool)
             
     ## Evaluate fitness
             logger.info("Calculating fitness for generation %s...", self.generation.current)
@@ -318,6 +327,18 @@ class Optimizer():
                 logger.info("Calculating fitness for generation %s...", self.generation.current)
                 logger.info("Done!")
 
+            elif self.input.methodology == 'reinforcement_leraning':
+                # new_chromosome_list now holds a list of SB3Agent objects
+                # Iterate through each agent and get their predictions
+                # population.current will hold the final predictions of the models
+                self.population.current = []
+
+                for i in range(len(new_chromosome_list)):
+                    # Train this agent
+                    new_chromosome_list[i].train()
+                    # After training, get the model's latest prediction and add it to the list
+                    self.population.current.append(new_chromosome_list[i].full_predict())
+                
             else: #every other algorithm
                 self.population.current = []
                 for i in range(len(new_chromosome_list)):
@@ -440,29 +461,3 @@ class Optimizer():
             optimization_information.plot_optimization_convergence()
     
         return
-
-
-class AgentOptimizer():
-    '''
-    Temporarily named AgentOptimizer, may change this.
-
-    Handles the implementation and learning of an agent.
-    Analog to the Optimizer class but for agent-focused algorithm rather than gene-based algorithms.
-    Theoretically, this should have very similar functionality.
-
-    # Notes:
-    I also wanted a cleaner starting environment to use while developing the RL system.
-    Should be easy to reintigrate to Optimizer if that is deemed necessary.
-
-    Written by Bradley Maher. 01/17/2026
-    '''
-    def __init__(self, opts):
-        self.opts = opts
-        pass
-
-    @staticmethod
-    def validate_otps():
-        pass
-
-    def main(self):
-        pass
