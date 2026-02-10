@@ -2,6 +2,7 @@
 import numpy as np
 import gymnasium as gym
 import stable_baselines3 as sb3
+from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 import logging
 from typing import Any, TypeVar, SupportsFloat
@@ -94,7 +95,7 @@ class RLEnv(gym.Env):
         self.eval_func = eval_func
 
         # For testing with the IPWR database, I am hardcoding 6 discrete actions for each of the 8 assembly locations
-        self.action_space = gym.spaces.MultiDiscrete(np.array([6]*8), start=2)
+        self.action_space = gym.spaces.MultiDiscrete(np.array([6]*8))
 
         # Observation is the current core, and each of the 3 objective values
         self.observation_space = gym.spaces.Dict({
@@ -138,9 +139,8 @@ class RLEnv(gym.Env):
 
         return observation, reward, terminated, False, info
 
-    def render(self, mode='console') -> Any | list[Any] | None:
-        if mode != 'console':
-            mode = 'console'
+    def render(self) -> Any | list[Any] | None:
+        pass
 
     def close(self) -> None:
         pass
@@ -172,7 +172,8 @@ class RLEnv(gym.Env):
 
         with self.population.current[0] as soln: # I really hope this WITH statement works as I imagined it would
             # Set the solution object's chromosome to this state
-            soln.chromosome = self._current
+            gene_map = ['FA1', 'FA2', 'FA3', 'FA4', 'FA5', 'FA6']
+            soln.chromosome = [gene_map[gene] for gene in self._current]
             inactive = False
 
             # See if the chromosome has already been tested. If not, run our chosen code to get it
@@ -245,7 +246,7 @@ class SB3Agent():
         policy = 'MultiInputPolicy'
 
         if self.opts.rl_algortihm == 'PPO':
-            self.model = sb3.PPO(policy, self.env)
+            self.model = sb3.PPO(policy, self.env, verbose=1)
         else:
             raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
 
@@ -255,6 +256,8 @@ class SB3Agent():
         # Wrappers
         env = ShiftMultiWrapper(env)
         env = Monitor(env)
+
+        check_env(env)
 
         return env
 
