@@ -164,15 +164,15 @@ class RLEnv(gym.Env):
 
         return observation
 
-    def _update_state(self, action):
+    def _update_state(self):
         '''
         Helper function to update the agent's state based on the action taken.
         '''
-        self._current = action
+        gene_map = ['FA1', 'FA2', 'FA3', 'FA4', 'FA5', 'FA6']
 
         with self.population.current[0] as soln: # I really hope this WITH statement works as I imagined it would
             # Set the solution object's chromosome to this state
-            soln.chromosome = self._current
+            soln.chromosome = [gene_map[gene] for gene in self._current]
             inactive = False
 
             # See if the chromosome has already been tested. If not, run our chosen code to get it
