@@ -1083,7 +1083,6 @@ def parcs343_template_check(self):
             raise ValueError(f'{self.code_interface} input template is missing {key} flag') 
 
 
-
 class Input_Parser():
     """
     Centralized class for parsing user-supplied input arguments from the 
@@ -1094,6 +1093,7 @@ class Input_Parser():
     def __init__(self, num_procs, inp_file):
         self.num_procs = int(num_procs)
         self.job_name = ".".join(inp_file.split('.')[:-1])
+
         with open(inp_file) as f:
             try:
                 self.file_settings = yaml.safe_load(f)
@@ -1102,13 +1102,23 @@ class Input_Parser():
         
         self.parse_input_data()
     
-    def parse_input_data(self):
-        """
-        Interpret parsed input data.
-        
-        Written by Nicholas Rollins. 09/11/2024
-        """
-    ## General Settings Block ##
+    def _general_options(self):
+        '''
+        General options for MIDAS execution
+
+        Attributes:
+            debug_mode:
+            results_dir_name:
+            set_seed:
+            clear_results:
+            methodology:
+            code_interface:
+            input_template:
+            calculation_type:
+            statistics_plots:
+            convergence_plots:
+            initial_population:
+        '''
         try:
             info = self.file_settings['general']
         except KeyError:
@@ -1120,15 +1130,27 @@ class Input_Parser():
         self.clear_results = yaml_line_reader(info, 'clear_results', 'all_but_best')
         self.methodology = yaml_line_reader(info, 'optimizer', 'genetic_algorithm')
         self.code_interface = yaml_line_reader(info, 'code_type', 'PARCS343')
-        template_default = {'apply':False,'loc':''}
-        self.input_template = yaml_line_reader(info, 'input_template', template_default)
+        self.input_template = yaml_line_reader(info, 'input_template',
+                                               {'apply':False, 'loc':''})
         self.calculation_type = yaml_line_reader(info, 'calc_type', 'single_cycle')
         self.statistics_plots = yaml_line_reader(info, 'statistics_plots', True)
         self.convergence_plots = yaml_line_reader(info, 'convergence_plots', True)
         self.initial_population = yaml_line_reader(info, 'initial_population', None)
+
         if self.input_template['apply'] and self.code_interface == 'parcs343':
             parcs343_template_check(self)
-    ## Optimization Block ##
+
+    def _optimization_options(self):
+        '''
+        General optimization options
+
+        Attributes:
+            population_size:
+            num_generations:
+            symmetry:
+            objectives:
+            termination_criteria:
+        '''
         try:
             info = self.file_settings['optimization']
         except KeyError:
@@ -1140,23 +1162,50 @@ class Input_Parser():
         self.num_generations = yaml_line_reader(info, 'number_of_generations', 1)
         self.symmetry = yaml_line_reader(info, 'solution_symmetry', 'octant')
         self.objectives = yaml_line_reader(info, 'objectives', None)
-        termination_criteria_default = {'method':'None','termination_generations':0}
-        self.termination_criteria = yaml_line_reader(info, 'termination_criteria', termination_criteria_default)
-        
-    ## Algorithm Block ##
+        self.termination_criteria = yaml_line_reader(info, 'termination_criteria',
+                                                     {'method':'None','termination_generations':0})
+
+    def _GA_options(self):
+        '''
+        Options for Genetic Algorithm methodology
+
+        Attributes:
+            selection:
+            reproducer:
+            crossover:
+            mutation_type:
+            mutation_rate:
+        '''
+        try:
+            info = self.file_settings['algorithm']
+        except KeyError:
+            info = None
+
+        self.selection = yaml_line_reader(info, 'selection', 
+                                          {'fitness':'weighted','method':'tournament'})
+        self.reproducer = yaml_line_reader(info, 'reproducer', 'standard')
+        self.crossover = yaml_line_reader(info, 'crossover', 
+                                          {'method':'one_point','crossover_rate': 0.5, 'num_swaps': 1})
+        self.mutation_type = yaml_line_reader(info, 'mutation_type', 'mutate_by_gene')
+        self.mutation_rate = yaml_line_reader(info, 'mutation_rate', 0.5)
+        self.elites = yaml_line_reader(info, 'elites', 0)
+
+    def _BO_options(self):
+        '''
+        Options for Bayesian Optimization methodology
+
+        Attributes:
+            acquisition_function:
+            exploration_exploitation_factor:
+            kernel_smoothness:
+            kernel_hyperparam_conv:
+            surrogate_fitting_off:
+        '''
         try:
             info = self.file_settings['algorithm']
         except KeyError:
             info = None
         
-        selection_default = {'fitness':'weighted','method':'tournament'}
-        self.selection = yaml_line_reader(info, 'selection', selection_default)
-        self.reproducer = yaml_line_reader(info, 'reproducer', 'standard')
-        self.mutation_type = yaml_line_reader(info, 'mutation_type', 'mutate_by_gene')
-        self.mutation_rate = yaml_line_reader(info, 'mutation_rate', 0.5)
-        crossover_default = {'method':'one_point','crossover_rate': 0.5, 'num_swaps': 1}
-        self.crossover = yaml_line_reader(info, 'crossover', crossover_default)
-        self.elites = yaml_line_reader(info, 'elites', 0)
         self.acquisition_function = yaml_line_reader(info, 'acquisition_function', 'LCB')
         #LCB and UCB acquisition functions will benefit more from an EE factor, and other acq functions may be better with a value of zero here
         if self.acquisition_function in ['LCB','UCB']:
@@ -1166,103 +1215,66 @@ class Input_Parser():
         self.kernel_smoothness = yaml_line_reader(info, 'kernel_smoothness_factor', 0.5)
         self.kernel_hyperparam_conv = yaml_line_reader(info, 'hyperparameter_convergence_criteria', 0.01)
         self.surrogate_fitting_off = yaml_line_reader(info, 'surrogate_off_generation', int(self.num_generations/2))
+
+    def _SA_options(self):
+        '''
+        Options for Simulated Annealing (and PSA) methodology
+
+        Attributes:
+            initial_temperature:
+            cooling_schedule:
+            update_factor:
+            perturbation_type:
+            secondary_cooling_schedule: PSA only
+            quality_factor:
+            scaling_factor
+        '''
+        try:
+            info = self.file_settings['algorithm']
+        except KeyError:
+            info = None
+        
         self.initial_temperature = yaml_line_reader(info, 'temperature', 100)
+
         if self.num_procs > 1:
             self.cooling_schedule = yaml_line_reader(info, 'cooling_schedule', 'lam')
         if self.num_procs <= 1:
             self.cooling_schedule = yaml_line_reader(info, 'cooling_schedule', 'exponential_decrease')
             if self.cooling_schedule == "lam":
                 raise ValueError(f"Cooling schedule '{self.cooling_schedule}' only available for parallel simulated annealing.")
-        self.secondary_cooling_schedule = yaml_line_reader(info, 'secondary_cooling_schedule', 'exponential_decrease')
+            
         self.update_factor = yaml_line_reader(info, 'update_factor', 0.95)
+        self.perturbation_type = yaml_line_reader(info, 'perturbation_type',
+                                                  {'method':'perturb_by_gene','num_perturbations':1})
+        self.secondary_cooling_schedule = yaml_line_reader(info, 'secondary_cooling_schedule', 'exponential_decrease')
         self.quality_factor = yaml_line_reader(info, 'quality_factor', 1.1)
         self.scaling_factor = yaml_line_reader(info, 'scaling_factor', 1.5)
-        perturbation_default = {'method':'perturb_by_gene','num_perturbations':1}
-        self.perturbation_type = yaml_line_reader(info, 'perturbation_type', perturbation_default)
         self.buffer_size = yaml_line_reader(info, 'buffer_size', 10)
 
-        
-    ## Fuel Assembly Block ##   
-        self.fa_options = yaml_line_reader(self.file_settings, 'assembly_options', None)
-        if not self.fa_options and self.code_interface not in ['nuscale_database','polaris624','serpent','custom_function','styblinski_tang']:
-            raise ValueError("Assembly options must be nested with reflectors, fuels, and/or blankets with their parameters.")
-        if self.calculation_type in ['single_cycle','eq_cycle']:
-            for param in ['cost_fuelcycle','av_fuelenrichment']:
-                if param in self.objectives:
-                    for key in self.fa_options['fuel'].keys():
-                        if not 'enrichment' in self.fa_options['fuel'][key] and \
-                           not 'hm_loading' in self.fa_options['fuel'][key]:
-                            raise ValueError(f"Entry for 'enrichment' or 'HM_loading' missing for fuel type '{key}'. This is required by the '{param}' objective.")
-                    if 'blankets' in self.fa_options:
-                        for key in self.fa_options['blankets'].keys():
-                            if not 'enrichment' in self.fa_options['blankets'][key] and \
-                               not 'hm_loading' in self.fa_options['blankets'][key]:
-                                raise ValueError(f"Entry for 'enrichment' or 'HM_loading' missing for blanket type '{key}'. This is required by the '{param}' objective.")
-        
-    ## Fuel Pin Parts Block ## (for lattice physics calcs)
-        self.pin_options = yaml_line_reader(self.file_settings, 'rod_options', None)
-        if not self.pin_options and self.calculation_type in ['lattice_physics']:
-            raise ValueError("Fuel pin options must be nested with rod_geometries, compositions, and/or controls_rods.")
-        
-        
-    ## Genome Block ##
+    def _RL_options(self):
+        '''
+        Options for Reinforcement Learning methodology
+        '''
         try:
-            info = self.file_settings['decision_variables']
+            info = self.file_settings['algorithm']
         except KeyError:
             info = None
         
-        if self.calculation_type in ['single_cycle','eq_cycle','listsum']:
-            self.genome = yaml_line_reader(info, 'assembly_parameters', None)
-        elif self.calculation_type in ['lattice_physics']:
-            self.genome = yaml_line_reader(info, 'lattice_parameters', None)
-        elif self.calculation_type in ['continuous_variable']:
-            logger.warning("'parameters' decision variable is reserved for continous variables")
-            self.genome = yaml_line_reader(info, 'parameters', None)
-            #Create a list of possible values a gene can take for discrete ranges
-            self.genome = problem_preparation.Prepare_Problem_Values.prepare_discrete_range(self.genome)
-            #Normalize all ranges for continuous variables
-            self.genome = problem_preparation.Prepare_Problem_Values.normalize_continuous_variables(self.genome)
-
-        self.batches = yaml_line_reader(info, 'batches', None)
-        #check that decision variable options are valid.
-        if not self.genome:
-            raise ValueError("'assembly_parameters', 'lattice_parameters', or 'parameters' must be specified in Decision Variables.")
-        if self.calculation_type == 'eq_cycle' and not self.batches:
-            raise ValueError("'Batches' must be specified in Decision Variables for the 'EQ Cycle' type.")
-        for key, value in self.genome.items():
-            if self.fa_options:
-                if key not in self.fa_options['fuel']:
-                    raise ValueError(f"Decision variable option '{key}' not found in the list of fuel types under 'assembly_options'.")
-            elif self.pin_options:
-                if key not in self.pin_options['rod_geometries']:
-                    raise ValueError(f"Decision variable option '{key}' not found in the list of rod types under 'rod_options'.")
-        
-    ## Calculation Block ## #!TODO: should each parameter set be nested under a code-specific object?
-        info = None; THinfo = None; infomap = None # initialize info variables
-        if self.code_interface not in ['custom_function','styblinski_tang','listsum']:
+        pass
+    
+    def _PARCS_options(self):
+        '''
+        TODO: add docstring here
+        '''
+        try:
+            info = self.file_settings['parcs_data']
             try:
-                if self.code_interface in ["parcs342","parcs343"]:
-                    info = self.file_settings['parcs_data']
-                elif self.code_interface == "nuscale_database":
-                    info = self.file_settings['nuscale_data']
-                elif self.code_interface == "serpent":
-                    info = self.file_settings['serpent_data']
-                elif self.code_interface == "trace50p5": #multiphysics calcs must first be initialized in neutronics code.
-                    try:
-                        info = self.file_settings['parcs_data']
-                    except KeyError:
-                        pass
-                    THinfo = self.file_settings['trace_data']
-                elif self.code_interface == "polaris624":
-                    info = self.file_settings['polaris_data']
-                try:
-                    infomap = info['map']
-                except KeyError:
-                    pass
+                infomap = info['map']
             except KeyError:
                 pass
-        
-        # PARCS input block
+        except KeyError:
+            pass
+
         self.core_type = yaml_line_reader(info, 'core_type', "PWR")
         self.code_walltime = yaml_line_reader(info, 'exec_walltime', 600)
         self.nrow = yaml_line_reader(infomap, 'num_rows', 17)
@@ -1294,24 +1306,71 @@ class Input_Parser():
         self.active_cycles = yaml_line_reader(info, "active_cycles", 500)
         self.inactive_cycles = yaml_line_reader(info, "inactive_cycles", 50)
         self.particles_per_history = yaml_line_reader(info, "particles_per_history", 5000)
+
+    def _NUSCALE_verification(self):
+        '''
+        Verify correct settings for use with the IPWR database
+        '''
+        #Force octant symmetry for NuScale database
+        if self.symmetry != 'octant':
+            logger.warning(f'Core symmetry has been changed from {self.symmetry} to octant. NuScale database only supports octant symmetry.')
+            self.symmetry == 'octant'
         
-        # TRACE input block
-        if self.code_interface == "trace50p5":
-            TRACE_file_defaults = {'templatefile':'./trace_ss.inp', 'maptabfile':'./TRACE-PARCS.map'}
-        else:
-            TRACE_file_defaults = {'templatefile':None, 'maptabfile':None}
+        #Verify assembly map length for each parameter in input file
+        for parameter in self.genome:
+            if len(self.genome[parameter]['map']) != 8:
+                map_length = len(parameter['map'])
+                raise ValueError(f'Parameter {parameter} has a map length of {map_length}, but needs length of 8.')
         
+        #Verify that the type parameter for each assembly is between 2-7, as these are the only assemblies available
+        for assembly in self.fa_options['fuel']:
+            if int(self.fa_options['fuel'][assembly]['type']) not in [2, 3, 4, 5, 6, 7]:
+                raise ValueError(f'Assembly {assembly} parameter "type" is incorrect. For NuScale database, types 2-7 exist.')
+    
+    def _SERPENT_options(self):
+        '''
+        TODO: add docstring here
+        '''
+        # What to put here? I don't thnk any actively used value are actually used for serpent interface
+        # or is serpent interface even setup right now?
+        # yknow judging by the fact that there is no serpent.py i'd assume serpent isn't set up.
+        pass
+
+    def _TRACE_options(self):
+        '''
+        TODO: docstring
+        '''
+        try:
+            try:
+                info = self.file_settings['parcs_data']
+            except KeyError:
+                pass
+            THinfo = self.file_settings['trace_data']
+            try:
+                infomap = info['map']
+            except KeyError:
+                pass
+        except KeyError:
+            pass
+
         self.init_code = yaml_line_reader(THinfo, 'initialize_code', 'PARCS343')
-        self.inp_template_ss = yaml_line_reader(THinfo, 'ss_input_file', TRACE_file_defaults['templatefile'])
-        self.inp_maptabfile = yaml_line_reader(THinfo, 'maptab_file', TRACE_file_defaults['maptabfile'])
+        self.inp_template_ss = yaml_line_reader(THinfo, 'ss_input_file', './trace_ss.inp')
+        self.inp_maptabfile = yaml_line_reader(THinfo, 'maptab_file', './TRACE-PARCS.map')
         self.ss_powerfraction = yaml_line_reader(THinfo, 'ss_power_fraction', 100)
         self.inp_template_tr = yaml_line_reader(THinfo, 'tr_input_file', None)
+
+    def _POLARIS_options(self):
+        '''
+        TODO: docstring
+        '''
+        try:
+            info = self.file_settings['polaris_data']
+        except KeyError:
+            pass
         
-        # POLARIS input block
-        if self.code_interface == "polaris624":
-            self.nrow = yaml_line_reader(info, 'num_rows', 17)
-            self.ncol = yaml_line_reader(info, 'num_cols', self.nrow)
-            self.map_size = yaml_line_reader(info, 'lattice_symmetry', 'SE')
+        self.nrow = yaml_line_reader(info, 'num_rows', 17)
+        self.ncol = yaml_line_reader(info, 'num_cols', self.nrow)
+        self.map_size = yaml_line_reader(info, 'lattice_symmetry', 'SE')
         self.system_type =  yaml_line_reader(info, 'system_type', 'PWR')
         self.xs_library = yaml_line_reader(info, 'xs_library', 'fine_therm') # May suffer from / need similar changes as PARCS XS library handling
         self.pin_pitch = yaml_line_reader(info, 'pin_pitch', 1.26)
@@ -1323,22 +1382,101 @@ class Input_Parser():
         self.cr_inserted = yaml_line_reader(info, 'controlrods_inserted', False)
         self.boronmat = yaml_line_reader(info, 'borated_material', None) #str, ppm
         self.num_meshrings = yaml_line_reader(info, 'num_mesh_rings', 3)
-        self.depl_steps = yaml_line_reader(info, 'depletion_steps', [1, 1, 30, 30, 30, 30, 30, 30])   
-        #NuScale database verification block
-        if self.code_interface == 'nuscale_database':
-            #Force octant symmetry for NuScale database
-            if self.symmetry != 'octant':
-                logger.warning(f'Core symmetry has been changed from {self.symmetry} to octant. NuScale database only supports octant symmetry.')
-                self.symmetry == 'octant'
-            
-            #Verify assembly map length for each parameter in input file
-            for parameter in self.genome:
-                if len(self.genome[parameter]['map']) != 8:
-                    map_length = len(parameter['map'])
-                    raise ValueError(f'Parameter {parameter} has a map length of {map_length}, but needs length of 8.')
-            
-            #Verify that the type parameter for each assembly is between 2-7, as these are the only assemblies available
-            for assembly in self.fa_options['fuel']:
-                if int(self.fa_options['fuel'][assembly]['type']) not in [2, 3, 4, 5, 6, 7]:
-                    raise ValueError(f'Assembly {assembly} parameter "type" is incorrect. For NuScale database, types 2-7 exist.')
+        self.depl_steps = yaml_line_reader(info, 'depletion_steps', [1, 1, 30, 30, 30, 30, 30, 30]) 
+
+    def parse_input_data(self):
+        """
+        Interpret parsed input data.
+        
+        Written by Nicholas Rollins. 09/11/2024
+        """
+        ## General Settings Block ##
+        self._general_options()
+        
+        ## Optimization Block ##
+        self._optimization_options()
+        
+        ## Algorithm Block ##
+        try:
+            info = self.file_settings['algorithm']
+        except KeyError:
+            info = None
+
+        if self.methodology == 'genetic_algorithm':
+            self._GA_options()
+        elif self.methodology == 'simulated_annealing':
+            self._SA_options()
+        elif self.methodology == 'bayesian_optimization':
+            self._BO_options()
+        elif self.methodology == 'reinforcement_learning':
+            self._RL_options()
+
+        ## Fuel Assembly Block ##   
+        self.fa_options = yaml_line_reader(self.file_settings, 'assembly_options', None)
+        if not self.fa_options and self.code_interface not in ['nuscale_database','polaris624','serpent','custom_function','styblinski_tang']:
+            raise ValueError("Assembly options must be nested with reflectors, fuels, and/or blankets with their parameters.")
+        if self.calculation_type in ['single_cycle','eq_cycle']:
+            for param in ['cost_fuelcycle', 'av_fuelenrichment']:
+                if param in self.objectives:
+                    for key in self.fa_options['fuel'].keys():
+                        if not 'enrichment' in self.fa_options['fuel'][key] and \
+                           not 'hm_loading' in self.fa_options['fuel'][key]:
+                            raise ValueError(f"Entry for 'enrichment' or 'HM_loading' missing for fuel type '{key}'. This is required by the '{param}' objective.")
+                    if 'blankets' in self.fa_options:
+                        for key in self.fa_options['blankets'].keys():
+                            if not 'enrichment' in self.fa_options['blankets'][key] and \
+                               not 'hm_loading' in self.fa_options['blankets'][key]:
+                                raise ValueError(f"Entry for 'enrichment' or 'HM_loading' missing for blanket type '{key}'. This is required by the '{param}' objective.")
+
+        ## Fuel Pin Parts Block ## (for lattice physics calcs)
+        self.pin_options = yaml_line_reader(self.file_settings, 'rod_options', None)
+        if not self.pin_options and self.calculation_type in ['lattice_physics']:
+            raise ValueError("Fuel pin options must be nested with rod_geometries, compositions, and/or controls_rods.")
+        
+        ## Genome Block ##
+        try:
+            info = self.file_settings['decision_variables']
+        except KeyError:
+            info = None
+        
+        if self.calculation_type in ['single_cycle','eq_cycle','listsum']:
+            self.genome = yaml_line_reader(info, 'assembly_parameters', None)
+        elif self.calculation_type in ['lattice_physics']:
+            self.genome = yaml_line_reader(info, 'lattice_parameters', None)
+        elif self.calculation_type in ['continuous_variable']:
+            logger.warning("'parameters' decision variable is reserved for continous variables")
+            self.genome = yaml_line_reader(info, 'parameters', None)
+            #Create a list of possible values a gene can take for discrete ranges
+            self.genome = problem_preparation.Prepare_Problem_Values.prepare_discrete_range(self.genome)
+            #Normalize all ranges for continuous variables
+            self.genome = problem_preparation.Prepare_Problem_Values.normalize_continuous_variables(self.genome)
+
+        self.batches = yaml_line_reader(info, 'batches', None)
+        #check that decision variable options are valid.
+        if not self.genome:
+            raise ValueError("'assembly_parameters', 'lattice_parameters', or 'parameters' must be specified in Decision Variables.")
+        if self.calculation_type == 'eq_cycle' and not self.batches:
+            raise ValueError("'Batches' must be specified in Decision Variables for the 'EQ Cycle' type.")
+        for key, value in self.genome.items():
+            if self.fa_options:
+                if key not in self.fa_options['fuel']:
+                    raise ValueError(f"Decision variable option '{key}' not found in the list of fuel types under 'assembly_options'.")
+            elif self.pin_options:
+                if key not in self.pin_options['rod_geometries']:
+                    raise ValueError(f"Decision variable option '{key}' not found in the list of rod types under 'rod_options'.")
+        
+        ## Calculation Block ##
+        info = None; THinfo = None; infomap = None # initialize info variables
+
+        if self.code_interface in ['parcs342', 'parcs343']:
+            self._PARCS_options()
+        elif self.code_interface == 'nuscale_database':
+            self._NUSCALE_verification()
+        elif self.code_interface == 'serpent':
+            self._SERPENT_options()
+        elif self.code_interface == 'trace50p5':
+            self._TRACE_options()
+        elif self.code_interface == 'polaris624':
+            self._POLARIS_options()
+        
         return
