@@ -4,8 +4,10 @@ import gymnasium as gym
 import stable_baselines3 as sb3
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.env_util import make_vec_env
+import stable_baselines3.common.logger as sb3_logging
 import logging
-from typing import Any, TypeVar, SupportsFloat
+from typing import Any, Optional, Union, SupportsFloat
 
 from itertools import repeat
 from midas.utils import optimizer_tools as optools
@@ -26,7 +28,7 @@ logger = logging.getLogger("MIDAS_logger")
 ## Classes ##
 class Reinforcement_Learning():
     '''
-    Handles the implementation and learning of RL agents.
+    Handles the implementation and learning of RL models.
 
     Written by Bradley Maher. 02/08/2026
     '''
@@ -36,24 +38,80 @@ class Reinforcement_Learning():
 
         # These values should be set later
         self.population = None
+        self.generation = None
+        self.initial = np.array([1, 1, 1, 1, 1, 1, 1, 1]) # Just hardcoded this for now to test
         self.pool = None
+        self.model = None
+        self.env = None
+        self.optimizer = None
     
-    def reproduction(self, pop_list, current_generation):
+    def reproduction(self, *args):
         '''
-        Returns a list of SB3Agent objects, with pop_list specified as the initial states
-        '''
-        agents = []
+        Train for population_size steps, returning the list of generated solutions.
 
-        for individual in pop_list:
-            agents.append(SB3Agent(self.opts, individual, self.population, self.eval_func))
-        
-        return agents
+        This function follows the same proccess as those found in the optimizer main loop:
+        reset population -> generate solutions -> find fitness
+
+        TODO: Explore using RolloutBuffers? Would decouple generation/training.
+        '''
+        # Reset current population
+        self.population.current = []
+
+        self.model.learn(total_timesteps=self.population.size, reset_num_timesteps=False)
+
+        return self.population.current
     
     def set_population(self, population):
         self.population = population
+    
+    def set_generation(self, generation):
+        self.generation = generation
 
     def set_pool(self, pool):
         self.pool = pool
+    
+    def set_optimizer(self, optimizer):
+        self.optimizer = optimizer
+    
+    def build_model(self):
+        '''
+        Builds the RL model based on the user inputs.
+
+        For now, only builds a SB3 based PPO model.
+        '''
+        self.env = self._build_env()
+
+        policy = 'MultiInputPolicy' # TODO: allow this to be changed by the user
+
+        if self.opts.rl_algorithm == 'PPO':
+            self.model = sb3.PPO(policy, self.env, verbose=1, **self.opts.model_kwargs)
+        elif self.opts.rl_algorithm == 'A2C':
+            self.model = sb3.A2C(policy, self.env, verbose=1, **self.opts.model_kwargs)
+        else:
+            raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
+
+        # TODO: Fix the logger!
+        # # MUST set the model to have a null logger. Having a logger will interfere with pickling
+        # self.model.set_logger(sb3_logging.configure(None, []))
+
+    def _build_env(self):
+        env = RLEnv(self.opts, self.initial, self.population, self.generation, self.eval_func, self.optimizer)
+
+        # Wrappers
+        env = ShiftMultiWrapper(env)
+        env = Monitor(env)
+        # env = make_vec_env(env, n_envs=self.opts.population_size)
+
+        # check_env(env)
+
+        return env
+
+    # @staticmethod
+    # def validate_otps():
+    #     hyper_param_defaults = {
+    #         'policy': 'MultiInputPolicy'
+    #     }
+    #     pass
 
 
 class RLEnv(gym.Env):
@@ -81,18 +139,25 @@ class RLEnv(gym.Env):
     
     Written by Bradley Maher. 01/16/2026
     '''
-    def __init__(self, opts, initial, population, eval_func):
+    def __init__(self, opts, initial, population, generation, eval_func, optimizer):
         super().__init__()
 
         self.opts = opts
         self._initial = initial
         self._current = self._initial
+        self.soln = None
 
         # Population object to hold archives
         self.population = population
 
+        # Generation object
+        self.generation = generation
+
         # Evaluation function for fitness calculations
         self.eval_func = eval_func
+
+        # main optimizer object to steal the generate_solution function from and fitness
+        self.optimizer = optimizer
 
         # For testing with the IPWR database, I am hardcoding 6 discrete actions for each of the 8 assembly locations
         self.action_space = gym.spaces.MultiDiscrete(np.array([6]*8))
@@ -100,19 +165,24 @@ class RLEnv(gym.Env):
         # Observation is the current core, and each of the 3 objective values
         self.observation_space = gym.spaces.Dict({
             'current_chromosome': gym.spaces.MultiDiscrete(np.array([6]*8)),
-            'PinPowerPeaking': gym.spaces.Box(low=0),
-            'FDeltaH': gym.spaces.Box(low=0),
-            'cycle_length': gym.spaces.Box(low=0)
+            'pinpowerpeaking': gym.spaces.Box(low=0, high=np.inf, dtype=np.float64),
+            'fdeltah': gym.spaces.Box(low=0, high=np.inf, dtype=np.float64),
+            'cycle_length': gym.spaces.Box(low=0, high=np.inf, dtype=np.float64)
         })
 
-    # NOTE: * without an identifier captures any positional args, forcing seed and options to be passed as keyword arguments.
-    def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> tuple[Any, dict[str, Any]]:
+        # TODO: Allow this to be adjusted
+        self.steps_per_game = 1
+        self.cur_step = 0
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict[str, Any]] = None) -> tuple[Any, dict[str, Any]]:
         super().reset(seed=seed)
-        
+        # Reset step counter to start of episode
+        self.cur_step = 0
+
         # Reset agent state to the specified initial state
         self._current = self._initial
 
-        # Examine the chromosome for our chosen parameters
+        # Also reset the current 
         self._update_state()
 
         observation = self._get_obs()
@@ -122,30 +192,33 @@ class RLEnv(gym.Env):
 
     # Note: Make a more robust type check instead of Any?
     def step(self, action: Any) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
+        # Increase the amount of steps taken this game by one
+        self.cur_step += 1
+
         # Action is currently hardcoded to be a list of fuel types. Set the new state to the inputted action
         # Update this agent based on the action just taken
         self._current = action
         
         # The chromosome needs to be examined to find our chosen paramters and fitness now
         self._update_state()
+        self.population.current.append(self.soln)
 
         observation = self._get_obs()
         info = self._get_info()
 
-        # self.population.current[0] should now be updated after calling _update_state
-        reward = self.population.current[0].fitness_value
+        reward = self.soln.fitness_value
 
-        terminated = True # For now, one episode will be producing one core
+        terminated = True if self.cur_step >= self.steps_per_game else False
 
         return observation, reward, terminated, False, info
 
-    def render(self) -> Any | list[Any] | None:
+    def render(self) -> Union[Any, list[Any], None]:
         pass
 
     def close(self) -> None:
         pass
 
-    def _get_obs(self) -> gym.spaces.Space:
+    def _get_obs(self) -> Union[gym.spaces.Space, dict]:
         '''
         Converts state to the correct observation format.
 
@@ -156,11 +229,10 @@ class RLEnv(gym.Env):
         '''
         observation = {}
 
-        with self.population.current[0] as soln:
-            observation['current_chromosome'] = soln.chromosome
-            observation['pinpowerpeaking'] = soln.parameters['pinpowerpeaking']['value']
-            observation['fdeltah'] = soln.parameters['fdeltah']['value']
-            observation['cycle_length'] = soln.parameters['cycle_length']['value']
+        observation['current_chromosome'] = self._current
+        observation['pinpowerpeaking'] = np.array([self.soln.parameters['pinpowerpeaking']['value']])
+        observation['fdeltah'] = np.array([self.soln.parameters['fdeltah']['value']])
+        observation['cycle_length'] = np.array([self.soln.parameters['cycle_length']['value']])
 
         return observation
 
@@ -170,36 +242,38 @@ class RLEnv(gym.Env):
         '''
         gene_map = ['FA1', 'FA2', 'FA3', 'FA4', 'FA5', 'FA6']
 
-        with self.population.current[0] as soln: # I really hope this WITH statement works as I imagined it would
-            # Set the solution object's chromosome to this state
-            soln.chromosome = [gene_map[gene] for gene in self._current]
-            inactive = False
+        chromosome = [gene_map[gene] for gene in self._current]
 
-            # See if the chromosome has already been tested. If not, run our chosen code to get it
-            try: 
-                soln_index = self.population.archive['solutions'].index(soln.chromosome)
-                soln.fitness_value = self.population.archive['fitnesses'][soln_index]
-                soln.parameters = self.population.archive['parameters'][soln_index]
-                
-                inactive = True
+        # Built the next solution
+        self.soln = self.optimizer.generate_solution(f'Gen_{self.generation.current}_Indv_{len(self.population.current)}', chromosome)
+        
+        inactive = False # Why is this here?
 
-                logger.debug(f"Fitness value for solution '{soln.name}' will be taken from archive entry: {soln_index}.")
-            except ValueError:
-                # Chromosome is unique. We will calculate the fitness
+        # See if the chromosome has already been tested. If not, run our chosen code to get it
+        try: 
+            soln_index = self.population.archive['solutions'].index(self.soln.chromosome)
+            self.soln.fitness_value = self.population.archive['fitnesses'][soln_index]
+            self.soln.parameters = self.population.archive['parameters'][soln_index]
+            
+            inactive = True
 
-                logger.info("Calculating fitness")
-                ## Execute and parse objective/constraint values
-                if not inactive: # This guard is not really needed
-                    soln = self.eval_func(soln, self.input)
-                    if 'cost_fuelcycle' in self.input.objectives.keys():
-                        soln.parameters = LWR_fuelcyclecost.get_fuelcycle_cost(soln, self.input)
-                    if 'av_fuelenrichment' in self.input.objectives.keys():
-                        soln.parameters = LWR_averageenrichment.get_avfuelenrichment(soln, self.input)
-                    
-                    ## Calculate fitness from objective/constriant values
-                    soln.fitness_value = optools.Fitness.calculate(soln.parameters)
+            logger.debug(f"Fitness value for solution '{self.soln.name}' will be taken from archive entry: {soln_index}.")
+        except ValueError:
+            # Chromosome is unique. We will calculate the fitness
 
-                    logger.info("Done!")
+            logger.debug("Calculating fitness")
+            ## Execute and parse objective/constraint values
+            if not inactive: # This guard is not really needed
+
+                self.soln = self.eval_func(self.soln, self.opts)
+                if 'cost_fuelcycle' in self.opts.objectives.keys():
+                    self.soln.parameters = LWR_fuelcyclecost.get_fuelcycle_cost(self.soln, self.input)
+                if 'av_fuelenrichment' in self.opts.objectives.keys():
+                    self.soln.parameters = LWR_averageenrichment.get_avfuelenrichment(self.soln, self.input)
+
+                ## Calculate fitness from objective/constriant values
+                self.soln.fitness_value = self.optimizer.fitness.calculate(self.soln.parameters)
+                logger.debug("Done!")
 
     def _get_info(self) -> dict[str, Any]:
         '''
@@ -228,63 +302,12 @@ class RLEnv(gym.Env):
         pass
 
 
-class SB3Agent():
-    '''
-    Handles the learning of a model using training algorithms from SB3
-
-    Written by Bradley Maher. 01/16/2026
-    '''
-    def __init__(self, opts, initial, population, eval_func):
-        self.opts = opts
-        self.initial = initial
-        self.population = population
-        self.eval_func = eval_func
-
-        self.env = self._build_env()
-
-        policy = 'MultiInputPolicy'
-
-        if self.opts.rl_algortihm == 'PPO':
-            self.model = sb3.PPO(policy, self.env, verbose=1)
-        else:
-            raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
-
-    def _build_env(self):
-        env = RLEnv(self.opts, self.initial, self.population, self.eval_func)
-
-        # Wrappers
-        env = ShiftMultiWrapper(env)
-        env = Monitor(env)
-
-        check_env(env)
-
-        return env
-
-    def train(self):
-        self.model.learn(total_timesteps=self.opts.learning_generations)
-
-    def full_predict(self):
-        env = self.model.get_env()
-        observation, _ = env.reset()
-        action, _ = self.model.predict(observation)
-        env.step(action) # Pass the action to update the env's internal population object
-
-        return env.population.current[0]
-        
-    # @staticmethod
-    # def validate_otps():
-    #     hyper_param_defaults = {
-    #         'policy': 'MultiInputPolicy'
-    #     }
-    #     pass
-
-
 class ShiftMultiWrapper(gym.Wrapper):
     '''Stole this from the SB3 docs, needed for SB3 algorithms to work with offset discrete action spaces '''
     def __init__(self, env: gym.Env) -> None:
         super().__init__(env)
         assert isinstance(env.action_space, gym.spaces.MultiDiscrete)
-        self.action_space = gym.spaces.MultiDiscrete(env.action_space.nvec, start=0)
+        self.action_space = gym.spaces.MultiDiscrete(env.action_space.nvec, start=np.zeros(env.action_space.nvec.shape))
 
     def step(self, action):
         return self.env.step(action + self.env.action_space.start)
