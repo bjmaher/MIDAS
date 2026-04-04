@@ -436,13 +436,16 @@ def validate_input(keyword, value):
             raise ValueError("bufer size must be an integer")
         elif isinstance(value, int) and value < 1:
             raise ValueError("buffer size must be greater than 1")
+    
+    elif keyword == 'rl_algorithm':
+        value = str(value)
+        if value not in ['PPO', 'A2C']:
+            raise ValueError(f'Requested RL Algorithm \'{value}\' either not implemented or invalid')
+    
+    elif keyword == 'model_kwargs':
+        # Not really much to do here, this just just be a dictionary
+        pass
 
-    elif keyword == 'learning_generations':
-        value = int(value)
-        if not isinstance(value, int):
-            raise ValueError("learning generations must be an integer")
-        elif isinstance(value, int) and value < 1:
-            raise ValueError("learning generations must be greater than 1")
 
 ## Fuel Assembly Block ##
     elif keyword == 'assembly_options':
@@ -1204,7 +1207,8 @@ class InputParser():
         self.perturbation_type = yaml_line_reader(info, 'perturbation_type', perturbation_default)
         self.buffer_size = yaml_line_reader(info, 'buffer_size', 10)
 
-        self.learning_generations = yaml_line_reader(info, 'learning_generations', 1000)
+        self.rl_algorithm = yaml_line_reader(info, 'rl_algorithm', 'PPO')
+        self.model_kwargs = yaml_line_reader(info, 'model_kwargs', None)
         
     ## Fuel Assembly Block ##   
         self.fa_options = yaml_line_reader(self.file_settings, 'assembly_options', None)

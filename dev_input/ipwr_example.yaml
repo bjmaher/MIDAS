@@ -1,0 +1,87 @@
+## Optimizer Block
+general:
+  optimizer: genetic_algorithm
+  code_type: nuscale_database
+  results_directory_name: output_files
+
+optimization:
+  population_size: 8
+  number_of_generations: 8
+  objectives:
+    PinPowerPeaking:
+      goal: less_than_target
+      weight: 800.0 
+      target: 2.1
+    FDeltaH:
+      goal: less_than_target
+      target: 1.48
+      weight: 800.0     
+    cycle_length:
+      goal: maximize
+      weight: 1.0
+      
+## Algorithm Settings
+algorithm:
+  selection:
+    method: tournament
+  mutation_type: mutate_by_gene
+  mutation_rate: 0.30
+  crossover:
+    method: uniform
+    crossover_rate: 0.6
+
+## Fuel Assembly Parts
+assembly_options:
+  reflectors:
+    NSFA: 
+      refl_type: all
+      serial: None
+  blankets:
+    None:
+      serial: None
+  fuel: 
+    FA1: 
+      type: 2
+      serial: None
+      blanket: None
+    FA2: 
+      type: 3
+      serial: None
+      blanket: None
+    FA3: 
+      type: 4
+      serial: None
+      blanket: None
+    FA4: 
+      type: 5
+      serial: None
+      blanket: None
+    FA5: 
+      type: 6
+      serial: None
+      blanket: None
+    FA6: 
+      type: 7
+      serial: None
+      blanket: None
+
+## Genome
+decision_variables:
+  # parameters used to fill each chromosome.
+  assembly_parameters:
+    FA1:
+      map: &ID001
+        [1,
+         1, 1,
+         1, 1, 1,
+         1, 1]
+    FA2:
+      map: *ID001 #this is natively interpreted by yaml, which is super nice.
+    FA3:
+      map: *ID001
+    FA4:
+      map: *ID001
+    FA5:
+      map: *ID001
+    FA6:
+      map: *ID001

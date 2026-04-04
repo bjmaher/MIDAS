@@ -208,15 +208,22 @@ class Optimizer():
                 for i in range(self.population.size):
                     chromosome = self.get_initial_population(i) 
                     self.population.current.append(self.generate_solution(f'Gen_0_Indv_{i}', chromosome))
+            
             pool = Pool(processes=self.input.num_procs) #initialize parallel execution
 
             if self.input.methodology == 'simulated_annealing'and self.input.num_procs == 1:
                 logger.info(f"Initial Temperature: {self.input.initial_temperature}")
             elif self.input.methodology == 'reinforcement_learning':
-                # Pass the population to the RL handler. It will be needed to archive and look up solutions.
+                # This optimizer object will be needed to generate solutions. I would like to find a better alternative
+                self.algorithm.set_optimizer(self)
+                # Pass the population to the RL handler. It will be needed to archive solutions.
                 self.algorithm.set_population(self.population)
+                self.algorithm.set_generation(self.generation)
                 # # also pass the multithreading pool
                 # self.algorithm.set_pool(pool)
+
+                # It is now safe to build the model.
+                self.algorithm.build_model()
             
     ## Evaluate fitness
             logger.info("Calculating fitness for generation %s...", self.generation.current)
@@ -271,9 +278,12 @@ class Optimizer():
             logger.info(', '.join(archive_header)+'\n'+best_soln_string+'\n')
             
     ## Create restart file
-            logger.debug("Writing restart file %s...",self.input.job_name+".rst")
-            with open(self.input.job_name+".rst", "wb") as f: # Open in binary write mode
-                pickle.dump(self, f)
+            # TODO: FIX THE LOGGER
+            # Pickle does not work with SB3 as of now, SB3's logger is built deeply into the model object, and contains TextIOWrapper instances which pickle can't serialize
+            # 
+            # logger.debug("Writing restart file %s...",self.input.job_name+".rst")
+            # with open(self.input.job_name+".rst", "wb") as f: # Open in binary write mode
+            #     pickle.dump(self, f)
         
     ## Clear solution files to save disk space
             if self.input.clear_results == "all":
@@ -285,8 +295,7 @@ class Optimizer():
                 os.system(f'mv ./{self.input.results_dir_name}/Gen_0_Indv_{best_soln_index} ./{self.input.results_dir_name}/safeGen_0_Indv_{best_soln_index}')
                 os.system(f'rm -rf ./{self.input.results_dir_name}/Gen_0_Indv_*')
                 os.system(f'mv ./{self.input.results_dir_name}/safeGen_0_Indv_{best_soln_index} ./{self.input.results_dir_name}/Gen_0_Indv_{best_soln_index}')
-                logger.info("Done!\n")
-            
+                logger.info("Done!\n")        
     
 ## restart previous optimization routine ##
         else:
@@ -327,17 +336,10 @@ class Optimizer():
                 logger.info("Calculating fitness for generation %s...", self.generation.current)
                 logger.info("Done!")
 
-            elif self.input.methodology == 'reinforcement_leraning':
-                # new_chromosome_list now holds a list of SB3Agent objects
-                # Iterate through each agent and get their predictions
-                # population.current will hold the final predictions of the models
-                self.population.current = []
-
-                for i in range(len(new_chromosome_list)):
-                    # Train this agent
-                    new_chromosome_list[i].train()
-                    # After training, get the model's latest prediction and add it to the list
-                    self.population.current.append(new_chromosome_list[i].full_predict())
+            elif self.input.methodology == 'reinforcement_learning':
+                # Nothing really needs to be done here.
+                # As of now, the gym environment handles solution evaluation and storing the the population object
+                pass
                 
             else: #every other algorithm
                 self.population.current = []
@@ -361,6 +363,7 @@ class Optimizer():
                 logger.info("Calculating fitness for generation %s...", self.generation.current)
                 ## Execute and parse objective/constraint values
                 self.population.current = pool.starmap(self.eval_func, zip(self.population.current, repeat(self.input)))
+                
                 if 'cost_fuelcycle' in self.input.objectives.keys():
                     for soln in self.population.current:
                         soln.parameters = LWR_fuelcyclecost.get_fuelcycle_cost(soln, self.input)
@@ -384,6 +387,7 @@ class Optimizer():
                 self.population.archive['parameters'].append(soln.parameters)
             
             best_soln_index = [s.fitness_value for s in self.population.current].index(max([s.fitness_value for s in self.population.current]))
+            print(f'Best solution index: {best_soln_index}')
             for i in range(len(self.population.current)):
                 soln = self.population.current[i]
                 soln_result_list = [str(self.generation.current),str(i),'{0:.3f}'.format(soln.fitness_value)]
@@ -405,14 +409,17 @@ class Optimizer():
             logger.info(', '.join(archive_header)+'\n'+best_soln_string+'\n')
             
         ## Create restart file
-            logger.debug("Rewriting restart file %s...",self.input.job_name+".rst")
-            with open(self.input.job_name+".rst", "wb") as f: # Open in binary write mode
-                pickle.dump(self, f)
+            # TODO: FIX THE LOGGER
+            # Pickle does not work with SB3 as of now, SB3's logger is built deeply into the model object, and contains TextIOWrapper instances which pickle can't serialize
+            # 
+            # logger.debug("Rewriting restart file %s...",self.input.job_name+".rst")
+            # with open(self.input.job_name+".rst", "wb") as f: # Open in binary write mode
+            #     pickle.dump(self, f)
             
         ## Clear solution files to save disk space
             if self.input.clear_results == "all":
                 logger.info(f"Clearing solution files for Generation {self.generation.current}...")
-                os.system(f'rm -rf ./{self.input.results_dir_name}/Gen_{self.generation.current}_Indv_*')
+                os.system(f'rm -rf ./{self.input.results_dir_name}/Gen_{self.generation.current}_Indv_*') # Replace this with os.remove?
                 logger.info("Done!\n")
             elif self.input.clear_results == "all_but_best":
                 logger.info(f"Clearing all but best solution files for Generation {self.generation.current}...")
