@@ -86,7 +86,7 @@ def read_parquet(soln, input): #TODO!: Comment code better
         raise FileNotFoundError(f'The file {filepath} does not exist.')
 
     data = pq.read_table(filepath, filters=[("Group", "=", core_name)]).to_pandas().set_index("Group")
-
+    
     new_dict = {}
     new_dict["cycle_length"] = data.loc[core_name]["CL"]
     new_dict["fdeltah"] = data.loc[core_name]["FH"]

@@ -122,6 +122,11 @@ samples/sample_15/*
 # rl_dev
 
 
+# Run outputs and restore points
+midas_outputs/
+*.rst
+
+
 # else
 __pycache__/
 

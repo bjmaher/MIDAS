@@ -1,23 +1,23 @@
 ## Optimizer Information
 general:
-  optimizer: reinforcement_learning # Add to parser
-  code_type: ipwr_database
+  optimizer: reinforcement_learning
+  code_type: ipwr_database_legacy
   results_directory_name: output_files
   debug_mode: False
 
 ## Objectives and stuff
 optimization:
   population_size: 500
-  number_of_generations: 2
+  number_of_generations: 5
   objectives:
     PinPowerPeaking:
       goal: less_than_target
-      weight: 800.0 
-      target: 2.1
+      weight: 400.0 
+      target: 2
     FDeltaH:
       goal: less_than_target
-      target: 1.48
-      weight: 800.0
+      target: 1.5
+      weight: 400.0
     cycle_length:
       goal: maximize
       weight: 1.0
@@ -29,10 +29,23 @@ algorithm:
   # learning_generations: 100
   # steps_per_game: 100
   model_mode: ordinal
+  model_inputs:
+    prev_chromosome: [MultiDiscrete, nvec: [6, 6, 6, 6, 6, 6, 6, 6]]
+    chromosome_info:
+      pinpowerpeaking: [Box, {low: 0, high: +.inf, dtype: float}]
+      fdeltah:         [Box, {low: 0, high: +.inf, dtype: float}]
+      cycle_length:    [Box, {low: 0, high: +.inf, dtype: float}]
+      fitness:         [Box, {low: -.inf, high: +.inf, dtype: float}]
+    gene_info:
+      enrichment:     [Box, {low: 0, high: 1, dtype: float}]
+      gad_count:      [Box, {low: 0, high: 64, dtype: int}]
+      gad_loading:    [Box, {low: 0, high: 1, dtype: float}]
+      gad_enrichment: [Box, {low: 0, high: 1, dtype: float}]
+      map:            [MultiBinary, {n: 8}]
   model_kwargs:
-    n_steps: 10
+    n_steps: 50
     batch_size: 10
-    gamma: 0.99
+    gamma: 0.93
 
 ## Fuel Assembly Parts
 assembly_options:
@@ -45,39 +58,39 @@ assembly_options:
       serial: None
   fuel: 
     FA1:
-      type: 1
+      type: 2
       serial: None
       blanket: None
       enrichment: 1.95
       gad_count: 0
-      gad_loading: None
-      gad_enrichment: None
+      gad_loading: 0
+      gad_enrichment: 0
     FA2: 
-      type: 2
+      type: 3
       serial: None
       blanket: None
       enrichment: 2.05
       gad_count: 0
-      gad_loading: None
-      gad_enrichment: None
+      gad_loading: 0
+      gad_enrichment: 0
     FA3: 
-      type: 3
+      type: 4
       serial: None
       blanket: None
       enrichment: 2.70
       gad_count: 0
-      gad_loading: None
-      gad_enrichment: None
+      gad_loading: 0
+      gad_enrichment: 0
     FA4: 
-      type: 4
+      type: 5
       serial: None
       blanket: None
       enrichment: 3.60
       gad_count: 0
-      gad_loading: None
-      gad_enrichment: None
+      gad_loading: 0
+      gad_enrichment: 0
     FA5: 
-      type: 5
+      type: 6
       serial: None
       blanket: None
       enrichment: 2.70
@@ -85,7 +98,7 @@ assembly_options:
       gad_loading: 2.50
       gad_enrichment: 1.80
     FA6: 
-      type: 6
+      type: 7
       serial: None
       blanket: None
       enrichment: 2.70

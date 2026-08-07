@@ -1,0 +1,148 @@
+## General Settings Block
+general:
+  debug_mode: True
+  methodology: genetic_algorithm
+  code_type: PARCS343
+  calc_type: single cycle
+  results_directory_name: output_files
+  clear_results: all_but_best
+
+## Optimizer Block
+optimization:
+  population_size: 4
+  number_of_generations: 2
+  solution_symmetry: quarter #chromosome symmetry; octant NOT allowed for EQ cycle.
+  objectives:
+    cycle_length:
+      goal: maximize
+      weight: 1.0
+    fdeltah:
+      goal: less_than_target
+      weight: 400.0
+      target: 1.48
+    pinpowerpeaking:
+      goal: less_than_target
+      weight: 400.0
+      target: 2.1
+    max_boron:
+      goal: less_than_target
+      weight: 1.0
+      target: 1300
+
+## Algorithm Settings
+algorithm:
+  selection:
+    fitness: weighted
+    method: tournament #tournament or roulette
+  reproducer: standard
+  mutation_type: mutate_by_gene
+  mutation_rate: 0.90, 0.55
+  crossover:
+    method: uniform
+    crossover_rate: 0.35
+  elites: 0.10
+
+## Fuel Assembly Parts
+assembly_options:
+  reflectors:
+    FA250REFL:
+      refl_type: all #all, radial, top, or bottom
+      serial: ne512_250REFL
+  fuel:
+    FA200:
+      type: 2
+      serial: ne512_200
+      enrichment: 2.00 #wt%
+      gad_count: 0
+      gad_loading: 0
+      gad_enrichment: 0
+    FA250:
+      type: 3
+      serial: ne512_250
+      enrichment: 2.50 #wt%
+      gad_count: 0
+      gad_loading: 0
+      gad_enrichment: 0
+    FA250gd:
+      type: 4
+      serial: ne512_250gd
+      enrichment: 2.50 #wt%
+      gad_count: 16
+      gad_loading: 1.5
+      gad_enrichment: 2.375
+    FA320:
+      type: 5
+      serial: ne512_320
+      enrichment: 3.20 #wt%
+      gad_count: 0
+      gad_loading: 0
+      gad_enrichment: 0
+    FA320gd:
+      type: 6
+      serial: ne512_320gd
+      enrichment: 3.20 #wt%
+      gad_count: 16
+      gad_loading: 1.5
+      gad_enrichment: 3.0400
+    FA390:
+      type: 5
+      serial: ne512_390
+      enrichment: 3.90 #wt%
+      gad_count: 0
+      gad_loading: 0
+      gad_enrichment: 0
+    FA390gd:
+      type: 6
+      serial: ne512_390gd
+      enrichment: 3.90 #wt%
+      gad_count: 16
+      gad_loading: 1.5
+      gad_enrichment: 3.6075
+
+## Genome
+decision_variables:
+  # parameters used to fill each chromosome.
+  parameters:
+    FA200:
+      map: &ID001
+        [1,
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1, 1, 1,
+         1, 1, 1, 1]
+      constraint:
+        type: max_quantity
+        value: 200
+    FA250:
+      map: *ID001
+      constraint:
+        type: max_quantity
+        value: 200
+    FA320:
+      map: *ID001
+      constraint:
+        type: max_quantity
+        value: 200
+
+## Calculation Settings
+parcs_data:
+  exec_walltime: 3000
+  map:
+    num_rows: 17
+    num_cols: 17
+    number_assemblies: 157
+    core_symmetry: full #printing symmetry
+  xs_library_path: ./pmaxs
+  xs_extension: PMAXS #assumed file extension of the xs files (mixed extensions NOT supported)
+  power: 2560.0 #MW_th
+  flow: 16745.0
+  inlet_temperature: 546.8 #K
+  th_fdbk: True
+  pin_power_recon: True
+  num_axial_nodes: 19
+  axial_nodes: 30.48, 17*30.48, 30.48
+  boc_core_exposure: 0.0
+  depletion_steps: 1, 1, 2*14, 3*30, 4*60, 2*120, 100

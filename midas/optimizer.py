@@ -61,7 +61,7 @@ class Optimizer():
         elif self.input.code_interface == "parcs343":
             self.eval_func = parcs343.evaluate
         elif self.input.code_interface in ["ipwr_database", "ipwr_database_legacy"]:
-            self.eval_func = nuscale_lut.evaluate
+            self.eval_func = ipwr_lut.evaluate
         elif self.input.code_interface == "trace50p5":
             self.eval_func = trace50p5.evaluate
         elif self.input.code_interface == "polaris624":
@@ -119,7 +119,7 @@ class Optimizer():
         if chromosome:
             soln.chromosome = chromosome
         else: #generate random chromosome
-            soln.chromosome = soln.generate_initial(self.input.calculation_type, core_parameters,\
+            soln.chromosome = soln.generate_initial(self.input.calculation_type, core_parameters,
                                                     self.input.genome, self.input.batches) #'batches' is None when not applicable.
 
         return soln
@@ -203,6 +203,24 @@ class Optimizer():
                 for i in range(self.input.buffer_size):
                     chromosome = self.get_initial_population(i) 
                     self.population.current.append(self.generate_solution(f'Gen_0_Indv_{i}', chromosome))
+            elif self.input.methodology == 'reinforcement_learning':
+                # Construct starting chromosome from the first provided in the list (or a random one)
+                chromosome = self.get_initial_population(0) 
+                self.population.current.append(self.generate_solution(f'Gen_0_Indv_{0}', chromosome))
+
+                self.algorithm.initial = chromosome
+
+                # This optimizer object will be needed to generate solutions. I would like to find a better alternative
+                self.algorithm.set_optimizer(self)
+
+                # Pass the population to the RL handler. It will be needed to archive solutions.
+                self.algorithm.set_population(self.population)
+                self.algorithm.set_generation(self.generation)
+                # # also pass the multithreading pool
+                # self.algorithm.set_pool(pool)
+
+                # It is now safe to build the model.
+                self.algorithm.build_model()
             else:
                 logger.info("Generating initial population of %s individuals...", self.input.population_size)
                 for i in range(self.population.size):
@@ -213,17 +231,7 @@ class Optimizer():
 
             if self.input.methodology == 'simulated_annealing'and self.input.num_procs == 1:
                 logger.info(f"Initial Temperature: {self.input.initial_temperature}")
-            elif self.input.methodology == 'reinforcement_learning':
-                # This optimizer object will be needed to generate solutions. I would like to find a better alternative
-                self.algorithm.set_optimizer(self)
-                # Pass the population to the RL handler. It will be needed to archive solutions.
-                self.algorithm.set_population(self.population)
-                self.algorithm.set_generation(self.generation)
-                # # also pass the multithreading pool
-                # self.algorithm.set_pool(pool)
-
-                # It is now safe to build the model.
-                self.algorithm.build_model()
+                
             
     ## Evaluate fitness
             logger.info("Calculating fitness for generation %s...", self.generation.current)
@@ -338,7 +346,7 @@ class Optimizer():
 
             elif self.input.methodology == 'reinforcement_learning':
                 # Nothing really needs to be done here.
-                # As of now, the gym environment handles solution evaluation and storing the the population object
+                # As of now, the gym environment handles solution evaluation and storing the population object
                 pass
                 
             else: #every other algorithm

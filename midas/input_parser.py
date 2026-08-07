@@ -442,9 +442,32 @@ def validate_input(keyword, value):
         if value not in ['PPO', 'A2C']:
             raise ValueError(f'Requested RL Algorithm \'{value}\' either not implemented or invalid')
     
+    elif keyword == 'model_mode':
+        value = str(value)
+        if value not in ['ordinal', 'property']:
+            raise ValueError(f'Invalid model mode specified. Should the model output assembly types [ordinal] (e.g. \'FA1\', \'FA2\', ..) or assembly properties [property] (like enrch, gad loading, etc)?')
+    
+    elif keyword == 'model_inputs':
+        # This should be a dictionary of model input categories and keywords.
+        if not isinstance(value, (dict, type(None))):
+            raise TypeError(f'Model inputs is provided but not structed as a dictionary!')
+        elif value is None:
+            logger.warning('No reinforcment learning model input was specified. If using RL, the model has no observation of its state. Ignore if not using RL.')
+        else:
+            for key, words in value.items():
+                if key == 'prev_chromosome':
+                    print(words)
+                elif key == 'chromosome_info':
+                    print(words)
+                elif key == 'gene_info':
+                    print(words)
+                else:
+                    raise ValueError(f'Model input cataegory {key} unknown')
+
     elif keyword == 'model_kwargs':
-        # Not really much to do here, this just just be a dictionary
-        pass
+        # Not really much to do here, this just needs to be a dictionary
+        if not isinstance(value, (dict, type(None))):
+            raise TypeError('Model kwargs needs to be in the form of a dictionary.')
 
 
 ## Fuel Assembly Block ##
@@ -524,6 +547,21 @@ def validate_input(keyword, value):
                                     elif new_subsubkey == 'enrichment':
                                         new_subsubitem = float(subsubitem)
                                         if new_subsubitem >= 1.0:
+                                            # At some point I will be doing some natural uranium stuff, 
+                                            # and this little bit here will be so funny to have to track down again and fix
+                                            logger.warning('Converting FA enrichment from w8t % to w8t fraction!')
+                                            new_subsubitem = new_subsubitem/100 #change weight percent to weight fraction
+                                    elif new_subsubkey == 'gad_count':
+                                        new_subsubitem = float(subsubitem)
+                                    elif new_subsubkey == 'gad_loading':
+                                        new_subsubitem = float(subsubitem)
+                                        if new_subsubitem >= 1.0:
+                                            logger.warning('Converting FA gad loading from w8t % to w8t fraction!')
+                                            new_subsubitem = new_subsubitem/100 #change weight percent to weight fraction
+                                    elif new_subsubkey == 'gad_enrichment':
+                                        new_subsubitem = float(subsubitem)
+                                        if new_subsubitem >= 1.0:
+                                            logger.warning('Converting FA gad uox enrichment from w8t % to w8t fraction!')
                                             new_subsubitem = new_subsubitem/100 #change weight percent to weight fraction
                                     elif new_subsubkey == 'hm_loading':
                                         new_subsubitem = float(subsubitem) # kg
@@ -1207,7 +1245,10 @@ class InputParser():
         self.perturbation_type = yaml_line_reader(info, 'perturbation_type', perturbation_default)
         self.buffer_size = yaml_line_reader(info, 'buffer_size', 10)
 
+        # RL relevant inputs
         self.rl_algorithm = yaml_line_reader(info, 'rl_algorithm', 'PPO')
+        self.model_mode = yaml_line_reader(info, 'model_mode', 'ordinal')
+        self.model_inputs = yaml_line_reader(info, 'model_inputs', None)
         self.model_kwargs = yaml_line_reader(info, 'model_kwargs', None)
         
     ## Fuel Assembly Block ##   
@@ -1358,7 +1399,7 @@ class InputParser():
             #Force octant symmetry for ipwr database
             if self.symmetry != 'octant':
                 logger.warning(f'Core symmetry has been changed from {self.symmetry} to octant. ipwr database only supports octant symmetry.')
-                self.symmetry == 'octant'
+                self.symmetry = 'octant'
             
             #Verify assembly map length for each parameter in input file
             for parameter in self.genome:

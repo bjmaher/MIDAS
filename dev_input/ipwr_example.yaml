@@ -1,7 +1,7 @@
 ## Optimizer Block
 general:
   optimizer: genetic_algorithm
-  code_type: nuscale_database
+  code_type: ipwr_database
   results_directory_name: output_files
 
 optimization:
