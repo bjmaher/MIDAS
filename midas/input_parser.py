@@ -436,7 +436,8 @@ def validate_input(keyword, value):
             raise ValueError("bufer size must be an integer")
         elif isinstance(value, int) and value < 1:
             raise ValueError("buffer size must be greater than 1")
-    
+
+    # RL relevant block
     elif keyword == 'rl_algorithm':
         value = str(value)
         if value not in ['PPO', 'A2C']:
@@ -446,6 +447,14 @@ def validate_input(keyword, value):
         value = str(value)
         if value not in ['ordinal', 'property']:
             raise ValueError(f'Invalid model mode specified. Should the model output assembly types [ordinal] (e.g. \'FA1\', \'FA2\', ..) or assembly properties [property] (like enrch, gad loading, etc)?')
+
+    elif keyword == 'model_save_path':
+        if not isinstance(value, (str, type(None))):
+            raise TypeError(f'Model save location should be a string (or None)')
+
+    elif keyword == 'model_load_path':
+            if not isinstance(value, (str, type(None))):
+                raise TypeError(f'Model save location should be a string (or None)')
     
     elif keyword == 'model_inputs':
         # This should be a dictionary of model input categories and keywords.
@@ -1248,8 +1257,11 @@ class InputParser():
         # RL relevant inputs
         self.rl_algorithm = yaml_line_reader(info, 'rl_algorithm', 'PPO')
         self.model_mode = yaml_line_reader(info, 'model_mode', 'ordinal')
+        self.model_save_path = yaml_line_reader(info, 'model_save_path', None)
+        self.model_load_path = yaml_line_reader(info, 'model_load_path', None)
         self.model_inputs = yaml_line_reader(info, 'model_inputs', None)
         self.model_kwargs = yaml_line_reader(info, 'model_kwargs', None)
+        self.markov_kwargs = yaml_line_reader(info, 'markov_kwargs', None)
         
     ## Fuel Assembly Block ##   
         self.fa_options = yaml_line_reader(self.file_settings, 'assembly_options', None)

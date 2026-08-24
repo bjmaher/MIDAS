@@ -205,10 +205,15 @@ class Optimizer():
                     self.population.current.append(self.generate_solution(f'Gen_0_Indv_{i}', chromosome))
             elif self.input.methodology == 'reinforcement_learning':
                 # Construct starting chromosome from the first provided in the list (or a random one)
-                chromosome = self.get_initial_population(0) 
-                self.population.current.append(self.generate_solution(f'Gen_0_Indv_{0}', chromosome))
+                chromosome = self.get_initial_population(0)
+                initial_soln = self.generate_solution(f'Gen_0_Indv_{0}', chromosome)
+                self.population.current.append(initial_soln)
 
-                self.algorithm.initial = chromosome
+                # Construct the action space representation of the initial chromosome
+                # TODO: THIS WILL NOT WORK FOR NON-ORIDNAL MODEL MODES
+                gene_map = [key for key in self.input.genome.keys()]
+                self.algorithm.initial = [gene_map.index(gene) for gene in initial_soln.chromosome]
+                logger.debug(f"Setting RL initial state to {self.algorithm.initial}")
 
                 # This optimizer object will be needed to generate solutions. I would like to find a better alternative
                 self.algorithm.set_optimizer(self)
@@ -474,5 +479,9 @@ class Optimizer():
         #Plot convergence if user turned on convergence
         if self.input.convergence_plots:
             optimization_information.plot_optimization_convergence()
+
+        # Save RL model if applicable
+        if self.input.methodology == 'reinforcement_learning' and self.input.model_save_path is not None:
+            self.algorithm.save_model()
     
         return
