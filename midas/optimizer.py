@@ -388,16 +388,17 @@ class Optimizer():
                 for soln in self.population.current:
                     soln.fitness_value = self.fitness.calculate(soln.parameters)
                 logger.info("Done!")
+
+                ## Archive newly calculated solutions.
+                # only needd for the active solutions?
+                for soln in self.population.current:
+                    self.population.archive['solutions'].append(soln.chromosome)
+                    self.population.archive['fitnesses'].append(soln.fitness_value)
+                    self.population.archive['parameters'].append(soln.parameters)
                 
                 ## Recombine active and inactive solutions.
                 for soln in inactive_solutions:
-                    self.population.current.append(soln)
-        
-        ## Archive results
-            for soln in self.population.current:
-                self.population.archive['solutions'].append(soln.chromosome)
-                self.population.archive['fitnesses'].append(soln.fitness_value)
-                self.population.archive['parameters'].append(soln.parameters)
+                    self.population.current.append(soln)    
             
             best_soln_index = [s.fitness_value for s in self.population.current].index(max([s.fitness_value for s in self.population.current]))
             print(f'Best solution index: {best_soln_index}')

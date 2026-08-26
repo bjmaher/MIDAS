@@ -330,34 +330,34 @@ class RLEnv(gym.Env):
         # Built the next solution
         self.soln = self.optimizer.generate_solution(f'Gen_{self.generation.current}_Indv_{len(self.population.current)}', chromosome)
         
-        inactive = False # Why is this here?
-
         # See if the chromosome has already been tested. If not, run our chosen code to get it
         try: 
             soln_index = self.population.archive['solutions'].index(self.soln.chromosome)
             self.soln.fitness_value = self.population.archive['fitnesses'][soln_index]
             self.soln.parameters = self.population.archive['parameters'][soln_index]
-            
-            inactive = True
 
             logger.debug(f"Fitness value for solution '{self.soln.name}' will be taken from archive entry: {soln_index}.")
         except ValueError:
             # Chromosome is unique. We will calculate the fitness
 
             logger.debug("Calculating fitness")
+            
             ## Execute and parse objective/constraint values
-            if not inactive: # This guard is not really needed
+            self.soln = self.eval_func(self.soln, self.input)
+            if 'cost_fuelcycle' in self.input.objectives.keys():
+                self.soln.parameters = LWR_fuelcyclecost.get_fuelcycle_cost(self.soln, self.input)
+            if 'av_fuelenrichment' in self.input.objectives.keys():
+                self.soln.parameters = LWR_averageenrichment.get_avfuelenrichment(self.soln, self.input)
 
-                self.soln = self.eval_func(self.soln, self.input)
-                if 'cost_fuelcycle' in self.input.objectives.keys():
-                    self.soln.parameters = LWR_fuelcyclecost.get_fuelcycle_cost(self.soln, self.input)
-                if 'av_fuelenrichment' in self.input.objectives.keys():
-                    self.soln.parameters = LWR_averageenrichment.get_avfuelenrichment(self.soln, self.input)
+            ## Calculate fitness from objective/constriant values
+            self.soln.fitness_value = self.optimizer.fitness.calculate(self.soln.parameters)
 
-                ## Calculate fitness from objective/constriant values
-                self.soln.fitness_value = self.optimizer.fitness.calculate(self.soln.parameters)
+            logger.debug("Done!")
 
-                logger.debug("Done!")
+            # Add to archive
+            self.population.archive['solutions'].append(self.soln.chromosome)
+            self.population.archive['fitnesses'].append(self.soln.fitness_value)
+            self.population.archive['parameters'].append(self.soln.parameters)
 
     def _get_info(self) -> dict[str, Any]:
         '''
