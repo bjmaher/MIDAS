@@ -256,6 +256,7 @@ dependencies:
       - pygments==2.19.2
       - pytz==2026.1.post1
       - rich==14.3.3
+      - sb3-contrib==2.7.1
       - stable-baselines3==2.7.1
       - sympy==1.14.0
       - tensorboard==2.20.0
