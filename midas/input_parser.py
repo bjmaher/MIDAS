@@ -440,7 +440,7 @@ def validate_input(keyword, value):
     # RL relevant block
     elif keyword == 'rl_algorithm':
         value = str(value)
-        if value not in ['PPO', 'A2C']:
+        if value not in ['PPO', 'MaskablePPO', 'A2C']:
             raise ValueError(f'Requested RL Algorithm \'{value}\' either not implemented or invalid')
     
     elif keyword == 'model_mode':
@@ -465,11 +465,11 @@ def validate_input(keyword, value):
         else:
             for key, words in value.items():
                 if key == 'prev_chromosome':
-                    print(words)
+                    logger.debug(words)
                 elif key == 'chromosome_info':
-                    print(words)
+                    logger.debug(words)
                 elif key == 'gene_info':
-                    print(words)
+                    logger.debug(words)
                 else:
                     raise ValueError(f'Model input cataegory {key} unknown')
 

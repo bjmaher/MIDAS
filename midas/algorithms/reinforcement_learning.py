@@ -2,14 +2,19 @@
 import numpy as np
 import gymnasium as gym
 import stable_baselines3 as sb3
+import sb3_contrib
+
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import StopTrainingOnMaxEpisodes
+
 import stable_baselines3.common.logger as sb3_logging
+
 import logging
-from typing import Any, Optional, Union, SupportsFloat
+from typing import Any, Optional, Union, SupportsFloat, Callable
 from copy import deepcopy
+from math import pow, exp, log
 
 from itertools import repeat
 from midas.utils import optimizer_tools as optools
@@ -28,6 +33,33 @@ logger = logging.getLogger("MIDAS_logger")
 # ObsType = T_co
 # RenderFrame = Any # I have no idea what actual type RenderFrame is supposed to be
 
+# Parameter schedules
+def param_schedule(initial_value: float, schedule: str = 'constant', final_value: float = 0, power: float = 1) -> Callable[[float], float]:
+    '''
+    Various learning schedules, 
+    '''
+
+    def constant_func(*args) -> float:
+        return initial_value
+
+    def linear_func(prog_remaining: float) -> float:
+         return (initial_value - final_value) * prog_remaining + final_value
+
+    def power_func(prog_remaining: float) -> float:
+        return (initial_value - final_value) * pow(prog_remaining, power) + final_value
+
+    def exp_func(prog_remaining: float) -> float:
+        return final_value * exp(log(initial_value, final_value) * prog_remaining)
+
+    if schedule == 'constant':
+        return constant_func
+    elif schedule == 'linear':
+        return linear_func
+    elif schedule == 'power':
+        return power_func
+    elif schedule == 'exp':
+        return exp_func
+
 
 ## Classes ##
 class Reinforcement_Learning():
@@ -37,7 +69,7 @@ class Reinforcement_Learning():
     Written by Bradley Maher. 02/08/2026
     '''
     def __init__(self, input, eval_func):
-        self.input = input
+        self.input = deepcopy(input)
         self.eval_func = eval_func
 
         # These values should be set later
@@ -48,6 +80,11 @@ class Reinforcement_Learning():
         self.model = None
         self.env = None
         self.optimizer = None
+
+        # Update the learning rate to be a callable
+        self.input.model_kwargs['learning_rate'] = param_schedule(**self.input.model_kwargs['learning_rate'])
+        # Update clip range
+        self.input.model_kwargs['clip_range'] = param_schedule(**self.input.model_kwargs['clip_range'])
     
     def reproduction(self, *args):
         '''
@@ -62,9 +99,10 @@ class Reinforcement_Learning():
         self.population.current = []
 
         print('begining training')
-        callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=self.input.population_size, verbose=1)
+        # episode_count = self.input.population_size / self.input.markov_kwargs['steps_per_game']
+        # callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=episode_count, verbose=1)
 
-        self.model.learn(total_timesteps=int(1e10), reset_num_timesteps=False, callback=callback_max_episodes)
+        self.model.learn(total_timesteps=self.input.population_size, reset_num_timesteps=False)
         print('done training')
 
         return self.population.current
@@ -89,11 +127,13 @@ class Reinforcement_Learning():
         '''
         self.env = self._build_env()
 
-        policy = 'MultiInputPolicy' # TODO: allow this to be changed by the user
+        policy = 'MultiInputPolicy' # TODO: allow this to be changed by the user?
 
         if self.input.model_load_path is not None:
             if self.input.rl_algorithm == 'PPO':
                 self.model = sb3.PPO.load(self.input.model_load_path, self.env)
+            elif self.input.rl_algorithm == 'MaskablePPO':
+                self.model = sb3_contrib.MaskablePPO.load(self.input.model_load_path, self.env)
             elif self.input.rl_algorithm == 'A2C':
                 self.model = sb3.A2C.load(self.input.model_load_path, self.env)
             else:
@@ -101,6 +141,8 @@ class Reinforcement_Learning():
         else:
             if self.input.rl_algorithm == 'PPO':
                 self.model = sb3.PPO(policy, self.env, verbose=1, **self.input.model_kwargs)
+            elif self.input.rl_algorithm == 'MaskablePPO':
+                self.model = sb3_contrib.MaskablePPO(policy, self.env, verbose=1, **self.input.model_kwargs)
             elif self.input.rl_algorithm == 'A2C':
                 self.model = sb3.A2C(policy, self.env, verbose=1, **self.input.model_kwargs)
             else:
@@ -163,8 +205,6 @@ class RLEnv(gym.Env):
         super().__init__()
 
         self.input = input
-        self._initial = initial
-        self._current = self._initial
         self.soln = None
 
         # How should the model output chosen assemblies, as a 'type' or by properties?
@@ -178,7 +218,7 @@ class RLEnv(gym.Env):
         elif self.input.model_mode == 'property':
             # Convert from output properties to a specified assembly by name
             raise ValueError('Property output not supported yet')
-
+        
         # Population object to hold archives
         self.population = population
 
@@ -198,8 +238,13 @@ class RLEnv(gym.Env):
         self.observation_space = self._parse_obs_space()
 
         # If no starting initial chromosome was given, generate a random one.
-        if self._initial is None:
-            self._initial = self.action_space.sample()
+        if initial is None:
+            initial = self.action_space.sample()
+            initial = [self.gene_map[gene] for gene in initial]
+        self._initial = initial
+        logger.debug(f"Initial genome set to: {self._initial}")
+
+        self._current = self._initial
 
         # Example obsevation space:
         # self.observation_space = gym.spaces.Dict({
@@ -219,15 +264,21 @@ class RLEnv(gym.Env):
         # })
 
         self.cur_step = 0
+        self.cur_try = 0
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict[str, Any]] = None) -> tuple[Any, dict[str, Any]]:
         super().reset(seed=seed)
-        # Reset step counter to start of episode
+        # Reset step and try counter to start of episode
         self.cur_step = 0
+        self.cur_try = 0
+
+        # Scramble FA gene map if enabled
+        if self.input.markov_kwargs['scramble_FA']:
+            self.np_random.shuffle(self.gene_map)
 
         # Reset agent state to the specified initial state
-        self._current = self._initial
-
+        self._current = [self.gene_map.index(gene) for gene in self._initial]
+        
         # Also reset the current 
         self._update_state()
 
@@ -239,7 +290,9 @@ class RLEnv(gym.Env):
     # Note: Make a more robust type check instead of Any?
     def step(self, action: Any) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
         # Increase the amount of steps taken this game by one
-        self.cur_step += 1
+        self.cur_try += 1
+
+        past = self._current
 
         # Action is currently hardcoded to be a list of fuel types. Set the new state to the inputted action
         # Update this agent based on the action just taken
@@ -261,13 +314,15 @@ class RLEnv(gym.Env):
             observation = self._get_obs()
             info = self._get_info()
 
-            reward = self.soln.fitness_value # - 10 * (self.cur_step - 1)
+            reward = self.soln.fitness_value # - 10 * (self.cur_try - 1)
 
-            terminated = True
+            self.cur_step += 1
+            self.cur_try = 0
         else:
-            # Reset to initial and report
+            # Reset to previous success and report
             # No need to run _update_state(), as (theoretically) the soln object should still be the initial soln
-            self._current = self._initial
+            logger.warning(f'ILLEGAL CHROMOSOME, is the action mask set up properly?')
+            self._current = past
 
             observation = self._get_obs()
             info = self._get_info()
@@ -277,7 +332,13 @@ class RLEnv(gym.Env):
             # if 'fitness' in observation.keys():
             #     observation['fitness'] += failed_chromosome_reward
 
-            terminated = True if self.cur_step >= self.input.markov_kwargs['chromosome_rety_steps'] else False
+            # Enough failed steps have occured that we should move on to prevent hanging.
+            if self.cur_try >= self.input.markov_kwargs['chromosome_rety_steps']:
+                self.cur_step += 1
+                self.cur_try = 0
+            
+
+        terminated = True if self.cur_step >= self.input.markov_kwargs['steps_per_game'] else False
 
         return observation, reward, terminated, False, info
 
@@ -310,14 +371,17 @@ class RLEnv(gym.Env):
                     else:
                         observation[key] = np.array([self.soln.parameters[key]['value']])
             elif category == 'gene_info':
-                for assembly, assembly_options in self.input.fa_options['fuel'].items():
+                for id, assembly in enumerate(self.gene_map):
+                    assembly_options = self.input.fa_options['fuel'][assembly]
                     for key in keys:
                         if key == 'map':
-                            observation[f'{assembly}_{key}'] = self.input.genome[assembly]['map']
+                            observation[f'FA{id}_{key}'] = self.input.genome[assembly]['map']
                         else:
-                            observation[f'{assembly}_{key}'] = assembly_options[key]                            
+                            observation[f'FA{id}_{key}'] = assembly_options[key]                            
             else:
                 raise ValueError(f'Unknown RL input category {category}')
+
+        logger.debug(observation)
 
         return observation
 
@@ -405,22 +469,42 @@ class RLEnv(gym.Env):
                     else:
                         raise ValueError(f'Error on tag {tag}: space type {values[0]} not supported.')
             elif category == 'gene_info':
-                for assembly in self.input.fa_options['fuel'].keys():
+                for id in range(len(self.gene_map)):
                     for tag, values in keys.items():
                         if values[0] == 'Box':
-                            obs_space[f'{assembly}_{tag}'] = gym.spaces.Box(**values[1])
+                            obs_space[f'FA{id}_{tag}'] = gym.spaces.Box(**values[1])
                         elif values[0] == 'MultiDiscrete':
-                            obs_space[f'{assembly}_{tag}'] = gym.spaces.MultiDiscrete(**values[1])
+                            obs_space[f'FA{id}_{tag}'] = gym.spaces.MultiDiscrete(**values[1])
                         elif values[0] == 'MultiBinary':
-                            obs_space[f'{assembly}_{tag}'] = gym.spaces.MultiBinary(**values[1])
+                            obs_space[f'FA{id}_{tag}'] = gym.spaces.MultiBinary(**values[1])
                         else:
                             raise ValueError(f'Error on tag {tag}: space type {values[0]} not supported.')
             else:
                 raise ValueError(f'Unknown RL input category {category}')
 
-        print(obs_space)
+        logger.debug(f"Observation space set to: \n {obs_space}")
 
         return gym.spaces.Dict(obs_space)
+
+    def action_masks(self) -> list[bool]:
+        '''
+        Returns a boolean list corresponding to if a gene is valid in the chromosome location.
+
+        Only used when using MaskablePPO
+
+        Written by Bradley Maher 01/09/2026
+        '''
+        chromosome_length = len(self.input.genome[next(iter(self.input.genome.keys()))]['map'])
+        genome_depth = len(self.input.genome.keys())
+
+        action_mask = []
+
+        for loc in range(chromosome_length):
+            for gene in range(genome_depth):
+                action_mask.append(bool(self.input.genome[self.gene_map[gene]]['map'][loc]))
+
+        logger.debug(f'Current action mask: f{action_mask}')
+        return action_mask
 
 
 class ShiftMultiWrapper(gym.Wrapper):
