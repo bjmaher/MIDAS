@@ -209,11 +209,8 @@ class Optimizer():
                 initial_soln = self.generate_solution(f'Gen_0_Indv_{0}', chromosome)
                 self.population.current.append(initial_soln)
 
-                # Construct the action space representation of the initial chromosome
                 # TODO: THIS WILL NOT WORK FOR NON-ORIDNAL MODEL MODES
-                gene_map = [key for key in self.input.genome.keys()]
-                self.algorithm.initial = [gene_map.index(gene) for gene in initial_soln.chromosome]
-                logger.debug(f"Setting RL initial state to {self.algorithm.initial}")
+                self.algorithm.set_initial(initial_soln.chromosome)
 
                 # This optimizer object will be needed to generate solutions. I would like to find a better alternative
                 self.algorithm.set_optimizer(self)

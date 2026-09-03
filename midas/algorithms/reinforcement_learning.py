@@ -118,6 +118,9 @@ class Reinforcement_Learning():
     
     def set_optimizer(self, optimizer):
         self.optimizer = optimizer
+
+    def set_initial(self, initial):
+            self.initial = initial
     
     def build_model(self):
         '''
@@ -244,7 +247,7 @@ class RLEnv(gym.Env):
             initial = self.action_space.sample()
             initial = [self.gene_map[gene] for gene in initial]
         self._initial = initial
-        logger.debug(f"Initial genome set to: {self._initial}")
+        logger.debug(f"Initial chromosome set to: {self._initial}")
 
         self._current = self._initial
 
