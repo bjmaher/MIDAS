@@ -148,6 +148,8 @@ class Reinforcement_Learning():
             else:
                 raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
 
+        logger.debug(f'RL policy: \n{self.model.policy}')
+
         # TODO: Fix the logger!
         # # MUST set the model to have a null logger. Having a logger will interfere with pickling
         # self.model.set_logger(sb3_logging.configure(None, []))
