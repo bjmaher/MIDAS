@@ -14,7 +14,7 @@ import stable_baselines3.common.logger as sb3_logging
 import logging
 from typing import Any, Optional, Union, SupportsFloat, Callable
 from copy import deepcopy
-from math import pow, exp, log
+from math import pow, exp, log, tanh
 
 from itertools import repeat
 from midas.utils import optimizer_tools as optools
@@ -81,10 +81,10 @@ class Reinforcement_Learning():
         self.env = None
         self.optimizer = None
 
-        # Update the learning rate to be a callable
-        self.input.model_kwargs['learning_rate'] = param_schedule(**self.input.model_kwargs['learning_rate'])
-        # Update clip range
-        self.input.model_kwargs['clip_range'] = param_schedule(**self.input.model_kwargs['clip_range'])
+        # # Update the learning rate to be a callable
+        # self.input.model_kwargs['learning_rate'] = param_schedule(**self.input.model_kwargs['learning_rate'])
+        # # Update clip range
+        # self.input.model_kwargs['clip_range'] = param_schedule(**self.input.model_kwargs['clip_range'])
     
     def reproduction(self, *args):
         '''
@@ -97,6 +97,10 @@ class Reinforcement_Learning():
         '''
         # Reset current population
         self.population.current = []
+
+        # Save and reload with update model kwargs
+        self.save_model()
+        self.load_model(midas_data.__odir__ + '/' + self.input.model_save_path, self._get_model_kwargs())
 
         print('begining training')
         # episode_count = self.input.population_size / self.input.markov_kwargs['steps_per_game']
@@ -131,23 +135,17 @@ class Reinforcement_Learning():
         self.env = self._build_env()
 
         policy = 'MultiInputPolicy' # TODO: allow this to be changed by the user?
+        init_kwargs = self._get_model_kwargs()
 
         if self.input.model_load_path is not None:
-            if self.input.rl_algorithm == 'PPO':
-                self.model = sb3.PPO.load(self.input.model_load_path, self.env)
-            elif self.input.rl_algorithm == 'MaskablePPO':
-                self.model = sb3_contrib.MaskablePPO.load(self.input.model_load_path, self.env)
-            elif self.input.rl_algorithm == 'A2C':
-                self.model = sb3.A2C.load(self.input.model_load_path, self.env)
-            else:
-                raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
+            self.load_model(self.input.model_load_path, init_kwargs)
         else:
             if self.input.rl_algorithm == 'PPO':
-                self.model = sb3.PPO(policy, self.env, verbose=1, **self.input.model_kwargs)
+                self.model = sb3.PPO(policy, self.env, verbose=1, **init_kwargs)
             elif self.input.rl_algorithm == 'MaskablePPO':
-                self.model = sb3_contrib.MaskablePPO(policy, self.env, verbose=1, **self.input.model_kwargs)
+                self.model = sb3_contrib.MaskablePPO(policy, self.env, verbose=1, **init_kwargs)
             elif self.input.rl_algorithm == 'A2C':
-                self.model = sb3.A2C(policy, self.env, verbose=1, **self.input.model_kwargs)
+                self.model = sb3.A2C(policy, self.env, verbose=1, **init_kwargs)
             else:
                 raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
 
@@ -156,6 +154,20 @@ class Reinforcement_Learning():
         # TODO: Fix the logger!
         # # MUST set the model to have a null logger. Having a logger will interfere with pickling
         # self.model.set_logger(sb3_logging.configure(None, []))
+    
+    def _get_model_kwargs(self):
+        '''
+        Return the model kwargs for the current generation.
+        '''
+        this_kwargs = {}
+
+        for key in self.input.model_kwargs:
+            if key in ['policy_kwargs', 'tensorboard_log']:
+                this_kwargs[key] = self.input.model_kwargs[key]
+            else:
+                this_kwargs[key] = self.input.model_kwargs[key][self.generation.current - 1]
+
+        return this_kwargs
 
     def _build_env(self):
         env = RLEnv(self.input, self.initial, self.population, self.generation, self.eval_func, self.optimizer)
@@ -172,6 +184,16 @@ class Reinforcement_Learning():
 
     def save_model(self):
         self.model.save(path=midas_data.__odir__ + '/' + self.input.model_save_path)
+
+    def load_model(self, load_path, model_kwargs):
+        if self.input.rl_algorithm == 'PPO':
+            self.model = sb3.PPO.load(load_path, self.env, **model_kwargs)
+        elif self.input.rl_algorithm == 'MaskablePPO':
+            self.model = sb3_contrib.MaskablePPO.load(load_path, self.env, **model_kwargs)
+        elif self.input.rl_algorithm == 'A2C':
+            self.model = sb3.A2C.load(load_path, self.env, **model_kwargs)
+        else:
+            raise ValueError('Specified SB3 Algorithm either invalid or not inplemented')
 
     # @staticmethod
     # def validate_otps():
@@ -319,7 +341,11 @@ class RLEnv(gym.Env):
             observation = self._get_obs()
             info = self._get_info()
 
-            reward = self.soln.fitness_value # - 10 * (self.cur_try - 1)
+            pre_reward = self.soln.fitness_value
+            reward = self.input.markov_kwargs['reward_vscale'] * tanh(pre_reward * self.input.markov_kwargs['reward_hscale'])
+
+            info['reward/raw'] = pre_reward
+            info['reward/scaled'] = reward
 
             self.cur_step += 1
             self.cur_try = 0
@@ -334,6 +360,9 @@ class RLEnv(gym.Env):
 
             reward = self.input.markov_kwargs['failed_chromosome_reward']
 
+            info['reward/raw'] = reward
+            info['reward/scaled'] = reward
+
             # if 'fitness' in observation.keys():
             #     observation['fitness'] += failed_chromosome_reward
 
@@ -341,7 +370,6 @@ class RLEnv(gym.Env):
             if self.cur_try >= self.input.markov_kwargs['chromosome_rety_steps']:
                 self.cur_step += 1
                 self.cur_try = 0
-            
 
         terminated = True if self.cur_step >= self.input.markov_kwargs['steps_per_game'] else False
 
