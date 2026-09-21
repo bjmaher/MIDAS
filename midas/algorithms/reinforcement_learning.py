@@ -13,6 +13,7 @@ import stable_baselines3.common.logger as sb3_logging
 
 import logging
 from typing import Any, Optional, Union, SupportsFloat, Callable
+from collections.abc import Sequence
 from copy import deepcopy
 from math import pow, exp, log, tanh
 
@@ -165,8 +166,16 @@ class Reinforcement_Learning():
             if key in ['policy_kwargs', 'tensorboard_log']:
                 this_kwargs[key] = self.input.model_kwargs[key]
             else:
-                this_kwargs[key] = self.input.model_kwargs[key][self.generation.current - 1]
-
+                if isinstance(self.input.model_kwargs[key], Sequence):
+                    try:
+                        this_kwargs[key] = self.input.model_kwargs[key][self.generation.current - 1]
+                    except IndexError:
+                        this_kwargs[key] = self.input.model_kwargs[key][-1]
+                elif isinstance(self.input.model_kwargs[key], dict):
+                    this_kwargs[key] = param_schedule(**self.input.model_kwargs[key])
+                else:
+                    this_kwargs[key] = self.input.model_kwargs[key]
+            
         return this_kwargs
 
     def _build_env(self):
@@ -332,6 +341,9 @@ class RLEnv(gym.Env):
                                                                          [self.input.nrow, self.input.ncol, self.input.num_assemblies, self.input.symmetry, self.input.calculation_type], 
                                                                          [self.gene_map[gene] for gene in self._current])
         if chromosome_is_valid:
+            h = self.input.markov_kwargs['reward_hscale']
+            v = self.input.markov_kwargs['reward_vscale']
+
             logger.debug(f"CODE EVAL")
 
             self._update_state()
@@ -342,8 +354,15 @@ class RLEnv(gym.Env):
             info = self._get_info()
 
             pre_reward = self.soln.fitness_value
-            reward = self.input.markov_kwargs['reward_vscale'] * tanh(pre_reward * self.input.markov_kwargs['reward_hscale'])
 
+            if self.input.markov_kwargs['reward_func'] == 'tanh':
+                reward = v * tanh(pre_reward * h)
+            elif self.input.markov_kwargs['reward_func'] == 'softplus':
+                reward = log(1 + pow(2 * exp(v) - 1, h * pre_reward)) - log(2)
+            else:
+                logger.warning('Please specify reward function: tanh or softplus. Defaulting to raw fitness')
+                reward = pre_reward
+            
             info['reward/raw'] = pre_reward
             info['reward/scaled'] = reward
 
