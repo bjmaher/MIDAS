@@ -7,7 +7,7 @@ import sb3_contrib
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.callbacks import StopTrainingOnMaxEpisodes
+from stable_baselines3.common.callbacks import BaseCallback
 
 import stable_baselines3.common.logger as sb3_logging
 
@@ -62,6 +62,18 @@ def param_schedule(initial_value: float, schedule: str = 'constant', final_value
         return exp_func
 
 
+# Callback that adds reward info to the tensorboard logs
+class TensorboardCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+
+    def _on_step(self) -> bool:
+        # Log model raw reward (fitness)
+        self.logger.record("reward/raw", locals()['info']['reward/raw'])
+        self.logger.record("reward/squashed", locals()['info']['reward/squashed'])
+        return True
+
+
 ## Classes ##
 class Reinforcement_Learning():
     '''
@@ -107,7 +119,7 @@ class Reinforcement_Learning():
         # episode_count = self.input.population_size / self.input.markov_kwargs['steps_per_game']
         # callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=episode_count, verbose=1)
 
-        self.model.learn(total_timesteps=self.input.population_size, reset_num_timesteps=False)
+        self.model.learn(total_timesteps=self.input.population_size, reset_num_timesteps=False, callback=TensorboardCallback)
         print('done training')
 
         return self.population.current
@@ -242,6 +254,7 @@ class RLEnv(gym.Env):
 
         self.input = input
         self.soln = None
+        self.info = {}
 
         # How should the model output chosen assemblies, as a 'type' or by properties?
         # input.genome contains assembly maps
@@ -319,9 +332,9 @@ class RLEnv(gym.Env):
         self._update_state()
 
         observation = self._get_obs()
-        info = self._get_info()
+        self._get_info()
 
-        return observation, info
+        return observation, self.info
 
     # Note: Make a more robust type check instead of Any?
     def step(self, action: Any) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
@@ -363,8 +376,8 @@ class RLEnv(gym.Env):
                 logger.warning('Please specify reward function: tanh or softplus. Defaulting to raw fitness')
                 reward = pre_reward
             
-            info['reward/raw'] = pre_reward
-            info['reward/scaled'] = reward
+            self.info['reward/raw'] = pre_reward
+            self.info['reward/squashed'] = reward
 
             self.cur_step += 1
             self.cur_try = 0
@@ -375,12 +388,12 @@ class RLEnv(gym.Env):
             self._current = past
 
             observation = self._get_obs()
-            info = self._get_info()
+            self._get_info()
 
             reward = self.input.markov_kwargs['failed_chromosome_reward']
 
-            info['reward/raw'] = reward
-            info['reward/scaled'] = reward
+            self.info['reward/raw'] = reward
+            self.info['reward/squashed'] = reward
 
             # if 'fitness' in observation.keys():
             #     observation['fitness'] += failed_chromosome_reward
@@ -392,7 +405,7 @@ class RLEnv(gym.Env):
 
         terminated = True if self.cur_step >= self.input.markov_kwargs['steps_per_game'] else False
 
-        return observation, reward, terminated, False, info
+        return observation, reward, terminated, False, self.info
 
     def render(self) -> Union[Any, list[Any], None]:
         pass
