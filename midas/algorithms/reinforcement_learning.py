@@ -67,11 +67,28 @@ class TensorboardCallback(BaseCallback):
     def __init__(self, verbose=0):
         super().__init__(verbose)
 
+        self.raws = []
+        self.squashed = []
+
     def _on_step(self) -> bool:
-        # Log model raw reward (fitness)
-        self.logger.record("reward/raw", locals()['info']['reward/raw'])
-        self.logger.record("reward/squashed", locals()['info']['reward/squashed'])
+        # Log model raw reward (fitness) every step
+        raw = np.mean([info['reward/raw'] for info in self.locals['infos']])
+        squashed = np.mean([info['reward/squashed'] for info in self.locals['infos']])
+
+        self.raws.append(raw)
+        self.squashed.append(squashed)
+
+        self.logger.record("reward/raw", raw)
+        self.logger.record("reward/squashed", squashed)
         return True
+
+    def _on_rollout_end(self):
+        self.logger.record("reward/raw_mean", np.mean(self.raws))
+        self.logger.record("reward/squashed_mean", np.mean(self.squashed))
+
+        self.raws = []
+        self.squashed = []
+        return
 
 
 ## Classes ##
@@ -119,7 +136,7 @@ class Reinforcement_Learning():
         # episode_count = self.input.population_size / self.input.markov_kwargs['steps_per_game']
         # callback_max_episodes = StopTrainingOnMaxEpisodes(max_episodes=episode_count, verbose=1)
 
-        self.model.learn(total_timesteps=self.input.population_size, reset_num_timesteps=False, callback=TensorboardCallback)
+        self.model.learn(total_timesteps=self.input.population_size, reset_num_timesteps=False, callback=TensorboardCallback())
         print('done training')
 
         return self.population.current
@@ -364,7 +381,7 @@ class RLEnv(gym.Env):
             self.population.current.append(self.soln)
 
             observation = self._get_obs()
-            info = self._get_info()
+            self.info = self._get_info()
 
             pre_reward = self.soln.fitness_value
 
@@ -388,7 +405,7 @@ class RLEnv(gym.Env):
             self._current = past
 
             observation = self._get_obs()
-            self._get_info()
+            self.info = self._get_info()
 
             reward = self.input.markov_kwargs['failed_chromosome_reward']
 
