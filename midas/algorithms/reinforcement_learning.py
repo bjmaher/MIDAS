@@ -3,6 +3,7 @@ import numpy as np
 import gymnasium as gym
 import stable_baselines3 as sb3
 import sb3_contrib
+import os
 
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
@@ -504,6 +505,12 @@ class RLEnv(gym.Env):
             self.population.archive['solutions'].append(self.soln.chromosome)
             self.population.archive['fitnesses'].append(self.soln.fitness_value)
             self.population.archive['parameters'].append(self.soln.parameters)
+
+            ## Clear immediately if clear:all is set
+            # Mega smoothbrain code rn
+            # Love doing stupid stuff like this to make getting data easier
+            if self.input.clear_results == "all":
+                os.system(f'rm -rf ./{self.input.results_dir_name}/Gen_{self.generation.current}_Indv_*')
 
     def _get_info(self) -> dict[str, Any]:
         '''
